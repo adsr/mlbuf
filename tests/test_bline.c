@@ -6,11 +6,13 @@
 
 int main(int argc, char** argv) {
     buffer_t* buf;
+    size_t num_chars;
     buf = buffer_new();
     ASSERT("byte_count_a", 0, buf->byte_count);
     ASSERT("char_count_a", 0, buf->char_count);
     ASSERT("line_count_a", 1, buf->line_count);
-    buffer_insert(buf, 0, (char*)"line 1\nline 2", 13);
+    buffer_insert(buf, 0, (char*)"line 1\nline 2", 13, &num_chars);
+    ASSERT("num_chars", 13, num_chars);
     ASSERT("byte_count_b", 13, buf->byte_count);
     ASSERT("char_count_b", 13, buf->char_count);
     ASSERT("line_count_b", 2, buf->line_count);

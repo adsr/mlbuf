@@ -1,5 +1,5 @@
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include "mledit.h"
@@ -8,9 +8,9 @@
 static int _buffer_substr(buffer_t* self, bline_t* start_line, size_t start_col, bline_t* end_line, size_t end_col, char** ret_data, size_t* ret_data_len, size_t* ret_data_nchars);
 static int _buffer_update(buffer_t* self, baction_t* action);
 static bline_t* _buffer_bline_new(buffer_t* self);
-static int _buffer_bline_free(bline_t* bline, bline_t* mark_line, size_t mark_col);
+static int _buffer_bline_free(bline_t* bline, bline_t* maybe_mark_line, size_t col_delta);
 static bline_t* _buffer_bline_break(bline_t* bline, size_t col);
-static size_t _buffer_bline_insert(bline_t* bline, size_t col, char* data, size_t data_len);
+static size_t _buffer_bline_insert(bline_t* bline, size_t col, char* data, size_t data_len, int move_marks);
 static size_t _buffer_bline_delete(bline_t* bline, size_t col, size_t num_chars);
 static size_t _buffer_bline_col_to_index(bline_t* bline, size_t col);
 static int _buffer_bline_count_chars(bline_t* bline);
@@ -113,6 +113,11 @@ int buffer_insert(buffer_t* self, size_t offset, char* data, size_t data_len, si
     size_t ins_data_nchars;
     baction_t* action;
 
+    // Exit early if no data
+    if (data_len < 1) {
+        return MLEDIT_OK;
+    }
+
     // Find start line and col
     if ((rc = buffer_get_bline_col(self, offset, &start_line, &start_col)) != MLEDIT_OK) {
         return rc;
@@ -129,7 +134,7 @@ int buffer_insert(buffer_t* self, size_t offset, char* data, size_t data_len, si
         new_line = _buffer_bline_break(cur_line, cur_col);
         num_lines_added += 1;
         if (insert_len > 0) {
-            _buffer_bline_insert(cur_line, cur_col, data_cursor, insert_len);
+            _buffer_bline_insert(cur_line, cur_col, data_cursor, insert_len, 1);
         }
         data_remaining_len -= (data_newline - data_cursor) + 1;
         data_cursor = data_newline + 1;
@@ -137,7 +142,7 @@ int buffer_insert(buffer_t* self, size_t offset, char* data, size_t data_len, si
         cur_col = 0;
     }
     if (data_remaining_len > 0) {
-        cur_col += _buffer_bline_insert(cur_line, cur_col, data_cursor, data_remaining_len);
+        cur_col += _buffer_bline_insert(cur_line, cur_col, data_cursor, data_remaining_len, 1);
     }
 
     // Get inserted data
@@ -165,42 +170,31 @@ int buffer_insert(buffer_t* self, size_t offset, char* data, size_t data_len, si
 
 // Delete data from buffer
 int buffer_delete(buffer_t* self, size_t offset, size_t num_chars) {
-    int rc;
     bline_t* start_line;
     size_t start_col;
     bline_t* end_line;
     size_t end_col;
     bline_t* tmp_line;
-    bline_t* tmp_line2;
+    bline_t* swap_line;
+    bline_t* next_line;
     size_t tmp_len;
-    size_t remaining_chars;
     char* del_data;
     size_t del_data_len;
     size_t del_data_nchars;
     size_t num_lines_removed;
     size_t safe_num_chars;
+    size_t orig_char_count;
     baction_t* action;
 
-    // Find start line and col
-    if ((rc = buffer_get_bline_col(self, offset, &start_line, &start_col)) != MLEDIT_OK) {
-        return rc;
-    }
+    // Find start/end line and col
+    buffer_get_bline_col(self, offset, &start_line, &start_col);
+    buffer_get_bline_col(self, offset + num_chars, &end_line, &end_col);
 
-    // Find end line and col
-    end_line = start_line;
-    end_col = start_col;
-    remaining_chars = num_chars;
-    del_data = malloc(num_chars);
-    while (end_line && remaining_chars > 0) {
-        tmp_len = end_line->char_count - end_col;
-        if (remaining_chars > tmp_len) {
-            remaining_chars -= tmp_len + 1; // Plus one for newline
-            end_line = end_line->next;
-            end_col = 0;
-        } else {
-            remaining_chars -= tmp_len;
-            end_col += tmp_len;
-        }
+    // Exit early if there is nothing to delete
+    if (start_line == end_line && start_col == end_col) {
+        return MLEDIT_OK;
+    } else if (start_line == self->last_line && start_col == self->last_line->char_count) {
+        return MLEDIT_OK;
     }
 
     // Get deleted data
@@ -213,25 +207,32 @@ int buffer_delete(buffer_t* self, size_t offset, size_t num_chars) {
     }
 
     // Copy remaining portion of end_line to start_line:start_col
+    orig_char_count = start_line->char_count;
     if (start_line != end_line && (tmp_len = end_line->data_len - _buffer_bline_col_to_index(end_line, end_col)) > 0) {
         _buffer_bline_insert(
             start_line,
             start_col,
             end_line->data + (end_line->data_len - tmp_len),
-            tmp_len
+            tmp_len,
+            0
         );
     }
 
     // Remove lines after start_line thru end_line
-    // Relocate marks to start_line:start_col
+    // Relocate marks to end of start_line
     num_lines_removed = 0;
-    tmp_line2 = end_line->next;
-    for (tmp_line = start_line->next; tmp_line != end_line->next; tmp_line = tmp_line->next) {
-        _buffer_bline_free(tmp_line, start_line, start_col);
+    swap_line = end_line->next;
+    next_line = NULL;
+    tmp_line = start_line->next;
+    while (tmp_line != NULL && tmp_line != swap_line) {
+        next_line = tmp_line->next;
+        _buffer_bline_free(tmp_line, start_line, orig_char_count);
         num_lines_removed += 1;
+        tmp_line = next_line;
     }
-    start_line->next = tmp_line2;
-    if (tmp_line2) tmp_line2->prev = start_line;
+    start_line->next = swap_line;
+    if (swap_line) swap_line->prev = start_line;
+
 
     // Handle action
     action = calloc(1, sizeof(baction_t));
@@ -268,6 +269,7 @@ int buffer_get_bline_col(buffer_t* self, size_t offset, bline_t** ret_bline, siz
         }
     }
 
+    if (!prev_line) prev_line = self->first_line;
     *ret_bline = prev_line;
     *ret_col = prev_line->char_count;
     return MLEDIT_OK;
@@ -278,6 +280,7 @@ int buffer_get_offset(buffer_t* self, bline_t* bline, size_t col, size_t* ret_of
     bline_t* tmp_line;
     size_t offset;
 
+    offset = 0;
     for (tmp_line = self->first_line; tmp_line != bline->next; tmp_line = tmp_line->next) {
         if (tmp_line == bline) {
             offset += col;
@@ -316,7 +319,11 @@ static int _buffer_substr(buffer_t* self, bline_t* start_line, size_t start_col,
     for (tmp_line = start_line; tmp_line != end_line->next; tmp_line = tmp_line->next) {
         // Get copy_index + copy_len
         // Also increment nchars
-        if (tmp_line == start_line) {
+        if (start_line == end_line) {
+            copy_index = _buffer_bline_col_to_index(start_line, start_col);
+            copy_len = _buffer_bline_col_to_index(start_line, end_col) - copy_index;
+            nchars += end_col - start_col;
+        } else if (tmp_line == start_line) {
             copy_index = _buffer_bline_col_to_index(start_line, start_col);
             copy_len = tmp_line->data_len - copy_index;
             nchars += start_line->char_count - start_col;
@@ -361,6 +368,7 @@ static int _buffer_substr(buffer_t* self, bline_t* start_line, size_t start_col,
 
 static int _buffer_update(buffer_t* self, baction_t* action) {
     bline_t* tmp_line;
+    bline_t* last_line;
     size_t new_line_index;
 
     // Adjust counts
@@ -370,10 +378,13 @@ static int _buffer_update(buffer_t* self, baction_t* action) {
     self->is_data_dirty = 1;
 
     // Renumber lines
+    last_line = NULL;
     new_line_index = action->start_line->line_index;
     for (tmp_line = action->start_line->next; tmp_line != NULL; tmp_line = tmp_line->next) {
         tmp_line->line_index = ++new_line_index;
+        last_line = tmp_line;
     }
+    self->last_line = last_line ? last_line : action->start_line;
 
     // TODO handle undo stack
 
@@ -391,7 +402,7 @@ static bline_t* _buffer_bline_new(buffer_t* self) {
     return bline;
 }
 
-static int _buffer_bline_free(bline_t* bline, bline_t* mark_line, size_t mark_col) {
+static int _buffer_bline_free(bline_t* bline, bline_t* maybe_mark_line, size_t col_delta) {
     mark_t* mark;
     mark_t* mark_tmp;
     if (bline->data) free(bline->data);
@@ -399,8 +410,8 @@ static int _buffer_bline_free(bline_t* bline, bline_t* mark_line, size_t mark_co
     if (bline->char_styles) free(bline->char_styles);
     if (bline->marks) {
         DL_FOREACH_SAFE(bline->marks, mark, mark_tmp) {
-            if (mark_line) {
-                MLEDIT_MARK_MOVE(mark, mark_line, mark_col, 1);
+            if (maybe_mark_line) {
+                MLEDIT_MARK_MOVE(mark, maybe_mark_line, mark->col + col_delta, 1);
             } else {
                 DL_DELETE(bline->marks, mark);
                 mark_destroy(mark);
@@ -439,15 +450,12 @@ static bline_t* _buffer_bline_break(bline_t* bline, size_t col) {
         _buffer_bline_count_chars(bline); // Update char widths
     }
 
-    // Update last_line
-    if (bline->next == NULL) {
-        bline->buffer->last_line = new_line;
-    }
-
     // Insert new_line in linked list
     tmp_line = bline->next;
     bline->next = new_line;
     new_line->next = tmp_line;
+    new_line->prev = bline;
+    if (tmp_line) tmp_line->prev = new_line;
 
     // Move marks at or past col to new_line
     DL_FOREACH_SAFE(bline->marks, mark, mark_tmp) {
@@ -459,7 +467,7 @@ static bline_t* _buffer_bline_break(bline_t* bline, size_t col) {
     return new_line;
 }
 
-static size_t _buffer_bline_insert(bline_t* bline, size_t col, char* data, size_t data_len) {
+static size_t _buffer_bline_insert(bline_t* bline, size_t col, char* data, size_t data_len, int move_marks) {
     size_t index;
     mark_t* mark;
     mark_t* mark_tmp;
@@ -493,9 +501,11 @@ static size_t _buffer_bline_insert(bline_t* bline, size_t col, char* data, size_
     num_chars_added = bline->char_count - orig_char_count;
 
     // Move marks at or past col right by num_chars_added
-    DL_FOREACH_SAFE(bline->marks, mark, mark_tmp) {
-        if (mark->col >= col) {
-            mark->col += num_chars_added;
+    if (move_marks) {
+        DL_FOREACH_SAFE(bline->marks, mark, mark_tmp) {
+            if (mark->col >= col) {
+                mark->col += num_chars_added;
+            }
         }
     }
 
@@ -527,16 +537,14 @@ static size_t _buffer_bline_delete(bline_t* bline, size_t col, size_t num_chars)
     // Find delete bounds
     index = _buffer_bline_col_to_index(bline, col);
     index_end = _buffer_bline_col_to_index(bline, col + safe_num_chars);
-    move_len = (size_t)(bline->data_len - (index_end - index));
+    move_len = (size_t)(bline->data_len - index_end);
 
     // Shift data
     if (move_len > 0) {
+        fprintf(stderr, "memmove(%p + %d, %d, %d);\n", bline->data, index, index_end, move_len);
         memmove(bline->data + index, bline->data + index_end, move_len);
-        bline->data_len -= index_end - index;
-    } else {
-        MLEDIT_DEBUG_PRINTF("move_len lt 1; bline->data_len=%lu index_end=%lu data=%p\n",
-            bline->data_len, index_end, bline->data);
     }
+    bline->data_len -= index_end - index;
 
     // Update chars
     orig_char_count = bline->char_count;

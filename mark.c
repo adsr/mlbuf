@@ -35,16 +35,16 @@ int mark_insert_after(mark_t* self, char* data, size_t data_len) {
     return bline_insert(self->bline, self->col, data, data_len, NULL);
 }
 
-// Delete data before mark
-int mark_delete_before(mark_t* self, size_t num_chars) {
+// Delete data after mark
+int mark_delete_after(mark_t* self, size_t num_chars) {
     return bline_delete(self->bline, self->col, num_chars);
 }
 
-// Delete data after mark
-int mark_delete_after(mark_t* self, size_t num_chars) {
+// Delete data before mark
+int mark_delete_before(mark_t* self, size_t num_chars) {
     int rc;
-    if ((rc = mark_move_by(self, (ssize_t)num_chars)) == MLEDIT_OK) {
-        rc = mark_delete_before(self, num_chars);
+    if ((rc = mark_move_by(self, -1 * (ssize_t)num_chars)) == MLEDIT_OK) {
+        rc = mark_delete_after(self, num_chars);
     }
     return rc;
 }
@@ -53,24 +53,31 @@ int mark_delete_after(mark_t* self, size_t num_chars) {
 int mark_move_by(mark_t* self, ssize_t char_delta) {
     size_t offset;
     buffer_get_offset(self->bline->buffer, self->bline, self->col, &offset);
-    return mark_move_offset(self, (size_t)((ssize_t)offset + char_delta));
+    return mark_move_offset(
+        self,
+        (size_t)MLEDIT_MIN(self->bline->buffer->char_count,
+            MLEDIT_MAX(0, (ssize_t)offset + char_delta)
+        )
+    );
 }
 
 // Move mark by line delta
 int mark_move_vert(mark_t* self, ssize_t line_delta) {
     bline_t* cur_line;
+    bline_t* tmp_line;
     cur_line = self->bline;
     while (line_delta != 0) {
-        cur_line = line_delta > 0 ? cur_line->next : cur_line->prev;
-        if (!cur_line) {
+        tmp_line = line_delta > 0 ? cur_line->next : cur_line->prev;
+        if (!tmp_line) {
             break;
         }
+        cur_line = tmp_line;
         line_delta = line_delta + (line_delta > 0 ? -1 : 1);
     }
     if (cur_line == self->bline) {
         return MLEDIT_OK;
     }
-    MLEDIT_MARK_MOVE(self, cur_line, MLEDIT_MIN(cur_line->char_count, self->target_col), 0);
+    MLEDIT_MARK_MOVE(self, cur_line, self->target_col, 0);
     return MLEDIT_OK;
 }
 
@@ -143,9 +150,6 @@ int mark_find_prev_re(mark_t* self, char* re, size_t re_len, bline_t** ret_line,
     return mark_find_re(self, re, re_len, 1, ret_line, ret_col);
 }
 
-// Find matching bracket. If bracket is 0, use character at mark.
-int mark_find_bracket_pair(mark_t* self, char bracket, bline_t** ret_line, size_t* ret_col); // TODO
-
 #define MLEDIT_MARK_IMPLEMENT_MOVE_VIA_FIND(mark, findfn, ...) \
     int rc; \
     bline_t* line; \
@@ -180,14 +184,17 @@ int mark_move_prev_re(mark_t* self, char* re, size_t re_len) {
     MLEDIT_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_prev_re, re, re_len)
 }
 
-int mark_move_bracket_pair(mark_t* self, char bracket) {
-    MLEDIT_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_bracket_pair, bracket)
-}
-
+int mark_find_bracket_pair(mark_t* self, char bracket, bline_t** ret_line, size_t* ret_col); // TODO
+int mark_move_bracket_pair(mark_t* self, char bracket); // TODO
 int mark_delete_between_mark(mark_t* self, mark_t* other); // TODO
 int mark_get_between_mark(mark_t* self, mark_t* other, char** ret_str, size_t* ret_str_len); // TODO
 int mark_swap_with_mark(mark_t* self, mark_t* other); // TODO
-int mark_destroy(mark_t* self); // TODO
+
+// Free a mark
+int mark_destroy(mark_t* self) {
+    free(self);
+    return MLEDIT_OK;
+}
 
 // Find first occurrence of match according to matchfn. Search backwards if
 // reverse is truthy.

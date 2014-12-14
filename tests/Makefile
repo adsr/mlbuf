@@ -1,15 +1,15 @@
-CC="colorgcc"
+CC=colorgcc
+
+SRCS=$(wildcard *.c)
+TESTS=$(SRCS:.c=)
 
 all: run
 
-SRCS=$(wildcard *.c)
-TESTS=$(patsubst %.c,%,$(SRCS))
-
 run: $(TESTS)
-	find . -type f -executable -print0 | xargs -0 -n1 -I{} sh -c 'tput bold; echo TEST {}; tput sgr0; {}; echo'
+	find . -type f -executable -print0 | xargs -0 -n1 -I{} sh -c 'tput bold; echo TEST {}; tput sgr0; LD_LIBRARY_PATH=.. {}; echo'
 
 $(TESTS): $(SRCS)
-	gcc -Wall -g -static -L.. -I.. $< -o $@ -lmledit
+	$(CC) -g -Wall -I.. -L.. $@.c -o $@ -lmledit -lpcre
 
 clean:
 	rm -f *.o

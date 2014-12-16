@@ -184,6 +184,15 @@ int mark_move_prev_re(mark_t* self, char* re, size_t re_len) {
     MLEDIT_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_prev_re, re, re_len)
 }
 
+int mark_is_gt(mark_t* self, mark_t* other) {
+    if (self->bline->line_index == other->bline->line_index) {
+        return self->col > other->col ? 1 : 0;
+    } else if (self->bline->line_index > other->bline->line_index) {
+        return 1;
+    }
+    return 0;
+}
+
 int mark_find_bracket_pair(mark_t* self, char bracket, bline_t** ret_line, size_t* ret_col); // TODO
 int mark_move_bracket_pair(mark_t* self, char bracket); // TODO
 int mark_delete_between_mark(mark_t* self, mark_t* other); // TODO

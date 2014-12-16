@@ -7,11 +7,41 @@
 
 buffer_t* buf;
 mark_t* cursor;
+mark_t* range_a;
+mark_t* range_b;
 char str[6];
+srule_t* s_number;
+srule_t* s_identifiers;
+srule_t* s_strings1;
+srule_t* s_strings2;
+srule_t* s_multi_comment;
+srule_t* s_comment;
+srule_t* s_green;
+srule_t* s_range;
 
 void edit_init() {
     buf = buffer_new();
     cursor = buffer_add_mark(buf, NULL, 0);
+    s_number = srule_new_single("\\d+", sizeof("\\d+"), TB_BLUE | TB_BOLD, 0);
+    s_identifiers = srule_new_single(
+        "(int|integer|float|double|string|char|array|function|return)",
+        sizeof("(int|integer|float|double|string|char|array|function|return)"),
+        TB_GREEN, 0
+    );
+    s_strings1 = srule_new_single("'([^']|(\\'))*'", sizeof("'([^']|(\\'))*'"), TB_YELLOW, 0);
+    s_strings2 = srule_new_single("\"([^\"]|(\\\"))*\"", sizeof("\"([^\"]|(\\\"))*\""), TB_YELLOW | TB_BOLD, 0);
+    s_multi_comment = srule_new_multi("/\\*", sizeof("/\\*"), "\\*/", sizeof("\\*/"), TB_CYAN, 0);
+    s_comment = srule_new_single("//.*", sizeof("//.*"), TB_CYAN, 0);
+    s_green = srule_new_single("\\s+$", sizeof("\\s+$"), 0, TB_GREEN);
+    buffer_add_srule(buf, s_number);
+    buffer_add_srule(buf, s_identifiers);
+    buffer_add_srule(buf, s_strings1);
+    buffer_add_srule(buf, s_strings2);
+    buffer_add_srule(buf, s_multi_comment);
+    buffer_add_srule(buf, s_comment);
+    buffer_add_srule(buf, s_green);
+    range_a = NULL;
+    range_b = NULL;
 }
 
 void edit_type(struct tb_event* ev) {
@@ -25,8 +55,19 @@ void edit_delete(int backspace) {
     else mark_delete_after(cursor, 1);
 }
 
-void edit_drop_mark() {
-    buffer_add_mark(buf, cursor->bline, cursor->col);
+void edit_drop_range_mark() {
+    if (!range_a) {
+        range_a = buffer_add_mark(buf, cursor->bline, cursor->col);
+    } else if (!range_b) {
+        range_a = buffer_add_mark(buf, cursor->bline, cursor->col);
+        s_range = srule_new_range(range_a, range_b, TB_REVERSE, TB_REVERSE);
+        buffer_add_srule(buf, s_range);
+    } else {
+        buffer_remove_srule(buf, s_range);
+        range_a = NULL;
+        range_b = NULL;
+        range_a = buffer_add_mark(buf, cursor->bline, cursor->col);
+    }
 }
 
 void edit_render() {
@@ -48,10 +89,12 @@ void edit_render() {
                     break;
                 }
             }
+fprintf(stderr, "c[%d].fg=%d\n", j, j < line->char_count ? line->char_styles[j].fg : 0);
             tb_change_cell(
                 j+3, i,
                 j < line->char_count ? line->data[line->char_indexes[j]] : ' ',
-                0, is_mark ? TB_RED : 0
+                j < line->char_count ? line->char_styles[j].fg : 0,
+                is_mark ? TB_RED : (j < line->char_count ? line->char_styles[j].bg : 0)
             );
         }
     }
@@ -71,7 +114,7 @@ int main(int argc, char** argv) {
             if      (ev.key == TB_KEY_CTRL_C)      { break; }
             else if (ev.key == TB_KEY_CTRL_A)      { mark_move_bol(cursor); }
             else if (ev.key == TB_KEY_CTRL_E)      { mark_move_eol(cursor); }
-            else if (ev.key == TB_KEY_CTRL_D)      { edit_drop_mark(); }
+            else if (ev.key == TB_KEY_CTRL_D)      { edit_drop_range_mark(); }
             else if (ev.key == TB_KEY_BACKSPACE)   { edit_delete(1); }
             else if (ev.key == TB_KEY_BACKSPACE2)  { edit_delete(1); }
             else if (ev.key == TB_KEY_ARROW_LEFT)  { mark_move_by(cursor, -1); }

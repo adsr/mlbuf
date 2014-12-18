@@ -150,6 +150,151 @@ int mark_find_prev_re(mark_t* self, char* re, size_t re_len, bline_t** ret_line,
     return mark_find_re(self, re, re_len, 1, ret_line, ret_col);
 }
 
+// Return 1 if self is past other, otherwise return 0
+int mark_is_gt(mark_t* self, mark_t* other) {
+    if (self->bline->line_index == other->bline->line_index) {
+        return self->col > other->col ? 1 : 0;
+    } else if (self->bline->line_index > other->bline->line_index) {
+        return 1;
+    }
+    return 0;
+}
+
+// Find the matching bracket character under the mark, examining no more than
+// max_chars.
+int mark_find_bracket_pair(mark_t* self, size_t max_chars, bline_t** ret_line, size_t* ret_col) {
+    char brkt;
+    char targ;
+    char cur;
+    int dir;
+    int i;
+    int nest;
+    size_t col;
+    size_t nchars;
+    bline_t* cur_line;
+    static char pairs[8] = {
+        '[', ']',
+        '(', ')',
+        '{', '}',
+        '<', '>'
+    };
+    // If we're at eol, there's nothing to match
+    if (self->col >= self->bline->char_count) {
+        return MLEDIT_ERR;
+    }
+    // Set brkt to char under mark
+    brkt = *(self->bline->data + self->bline->char_indexes[self->col]);
+    // Find targ matching bracket char
+    targ = 0;
+    for (i = 0; i < 8; i++) {
+        if (pairs[i] == brkt) {
+            if (i % 2 == 0) {
+                targ = pairs[i + 1];
+                dir = 1;
+            } else {
+                targ = pairs[i - 1];
+                dir = -1;
+            }
+            break;
+        }
+    }
+    // If targ is not set, brkt was not a bracket char
+    if (!targ) {
+        return MLEDIT_ERR;
+    }
+    // Now look for targ, keeping track of nesting
+    // Break if we look at more than max_chars
+    nest = 0;
+    col = MLEDIT_MAX(1, self->col) - 1;
+    nchars = 0;
+    while (cur_line) {
+        for (; col >= 0 && col < cur_line->char_count; col += dir) {
+            cur = *(cur_line->data + cur_line->char_indexes[col]);
+            if (cur == targ) {
+                if (nest == 0) {
+                    // Match!
+                    *ret_line = cur_line;
+                    *ret_col = col;
+                    return MLEDIT_OK;
+                } else {
+                    nest -= 1;
+                }
+            } else if (cur == brkt) {
+                nest += 1;
+            }
+            nchars += 1;
+            if (nchars >= max_chars) {
+                return MLEDIT_ERR;
+            }
+        }
+        if (dir > 0) {
+            cur_line = cur_line->next;
+            if (cur_line) col = 0;
+        } else {
+            cur_line = cur_line->prev;
+            if (cur_line) col = MLEDIT_MAX(1, cur_line->char_count) - 1;
+        }
+    }
+    // If we got here, targ was not found, or nesting was off
+    return MLEDIT_ERR;
+}
+
+// Delete data between self and other
+int mark_delete_between_mark(mark_t* self, mark_t* other) {
+    size_t offset_a;
+    size_t offset_b;
+    buffer_get_offset(self->bline->buffer, self->bline, self->col, &offset_a);
+    buffer_get_offset(other->bline->buffer, other->bline, other->col, &offset_b);
+    if (offset_a == offset_b) {
+        return MLEDIT_OK;
+    } else if (offset_a > offset_b) {
+        return buffer_delete(self->bline->buffer, offset_b, offset_a - offset_b);
+    }
+    return buffer_delete(self->bline->buffer, offset_a, offset_b - offset_a);
+}
+
+// Return data between self and other
+int mark_get_between_mark(mark_t* self, mark_t* other, char** ret_str, size_t* ret_str_len) {
+    size_t ig;
+    if (mark_is_gt(self, other)) {
+        return buffer_substr(
+            self->bline->buffer,
+            other->bline, other->col,
+            self->bline, self->col,
+            ret_str, ret_str_len, &ig
+        );
+    } else if (mark_is_gt(other, self)) {
+        return buffer_substr(
+            self->bline->buffer,
+            self->bline, self->col,
+            other->bline, other->col,
+            ret_str, ret_str_len, &ig
+        );
+    }
+    *ret_str = strdup("");
+    *ret_str_len = 0;
+    return MLEDIT_OK;
+}
+
+// Swap positions of self and other
+int mark_swap_with_mark(mark_t* self, mark_t* other) {
+    bline_t* tmp_bline;
+    size_t tmp_col;
+    tmp_bline = other->bline;
+    tmp_col = other->col;
+    other->bline = self->bline;
+    other->col = self->col;
+    self->bline = tmp_bline;
+    self->col = tmp_col;
+    return MLEDIT_OK;
+}
+
+// Free a mark
+int mark_destroy(mark_t* self) {
+    free(self);
+    return MLEDIT_OK;
+}
+
 #define MLEDIT_MARK_IMPLEMENT_MOVE_VIA_FIND(mark, findfn, ...) \
     int rc; \
     bline_t* line; \
@@ -184,25 +329,8 @@ int mark_move_prev_re(mark_t* self, char* re, size_t re_len) {
     MLEDIT_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_prev_re, re, re_len)
 }
 
-int mark_is_gt(mark_t* self, mark_t* other) {
-    if (self->bline->line_index == other->bline->line_index) {
-        return self->col > other->col ? 1 : 0;
-    } else if (self->bline->line_index > other->bline->line_index) {
-        return 1;
-    }
-    return 0;
-}
-
-int mark_find_bracket_pair(mark_t* self, char bracket, bline_t** ret_line, size_t* ret_col); // TODO
-int mark_move_bracket_pair(mark_t* self, char bracket); // TODO
-int mark_delete_between_mark(mark_t* self, mark_t* other); // TODO
-int mark_get_between_mark(mark_t* self, mark_t* other, char** ret_str, size_t* ret_str_len); // TODO
-int mark_swap_with_mark(mark_t* self, mark_t* other); // TODO
-
-// Free a mark
-int mark_destroy(mark_t* self) {
-    free(self);
-    return MLEDIT_OK;
+int mark_move_bracket_pair(mark_t* self, size_t max_chars) {
+    MLEDIT_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_bracket_pair, max_chars);
 }
 
 // Find first occurrence of match according to matchfn. Search backwards if

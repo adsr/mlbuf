@@ -1,6 +1,7 @@
 #ifndef __MLEDIT_H
 #define __MLEDIT_H
 
+#include <stdio.h>
 #include <stdint.h>
 #include <pcre.h>
 #include "utlist.h"
@@ -40,6 +41,7 @@ struct buffer_s {
     size_t data_len;
     int is_data_dirty;
     int _is_in_event_cb;
+    char _mark_counter;
     blistener_t* _listener_tmp;
     bevent_t _event_tmp;
 };
@@ -101,6 +103,7 @@ struct mark_s {
     bline_t* bline;
     size_t col;
     size_t target_col;
+    char letter;
     mark_t* next;
     mark_t* prev;
 };
@@ -133,7 +136,7 @@ buffer_t* buffer_new();
 mark_t* buffer_add_mark(buffer_t* self, bline_t* maybe_line, size_t maybe_col);
 int buffer_get(buffer_t* self, char** ret_data, size_t* ret_data_len);
 int buffer_set(buffer_t* self, char* data, size_t data_len);
-int buffer_substr(buffer_t* self, bline_t* start_line, size_t start_col, bline_t* end_line, size_t end_col, char** ret_data, size_t* ret_data_len);
+int buffer_substr(buffer_t* self, bline_t* start_line, size_t start_col, bline_t* end_line, size_t end_col, char** ret_data, size_t* ret_data_len, size_t* ret_nchars);
 int buffer_insert(buffer_t* self, size_t offset, char* data, size_t data_len, size_t* ret_num_chars);
 int buffer_delete(buffer_t* self, size_t offset, size_t num_chars);
 int buffer_get_bline_col(buffer_t* self, size_t offset, bline_t** ret_bline, size_t* ret_col);
@@ -144,6 +147,7 @@ int buffer_repeat_at(buffer_t* self, size_t offset);
 int buffer_add_srule(buffer_t* self, srule_t* srule);
 int buffer_remove_srule(buffer_t* self, srule_t* srule);
 int buffer_add_listener(buffer_t* self, blistener_t blistener);
+int buffer_debug_dump(buffer_t* self, FILE* stream);
 int buffer_destroy(buffer_t* self);
 
 // bline functions
@@ -175,14 +179,14 @@ int mark_find_next_cre(mark_t* self, pcre* cre, bline_t** ret_line, size_t* ret_
 int mark_find_prev_cre(mark_t* self, pcre* cre, bline_t** ret_line, size_t* ret_col);
 int mark_find_next_re(mark_t* self, char* re, size_t re_len, bline_t** ret_line, size_t* ret_col);
 int mark_find_prev_re(mark_t* self, char* re, size_t re_len, bline_t** ret_line, size_t* ret_col);
-int mark_find_bracket_pair(mark_t* self, char bracket, bline_t** ret_line, size_t* ret_col);
+int mark_find_bracket_pair(mark_t* self, size_t max_chars, bline_t** ret_line, size_t* ret_col);
 int mark_move_next_str(mark_t* self, char* str, size_t str_len);
 int mark_move_prev_str(mark_t* self, char* str, size_t str_len);
 int mark_move_next_cre(mark_t* self, pcre* cre);
 int mark_move_prev_cre(mark_t* self, pcre* cre);
 int mark_move_next_re(mark_t* self, char* re, size_t re_len);
 int mark_move_prev_re(mark_t* self, char* re, size_t re_len);
-int mark_move_bracket_pair(mark_t* self, char bracket);
+int mark_move_bracket_pair(mark_t* self, size_t max_chars);
 int mark_get_offset(mark_t* self, size_t* ret_offset);
 int mark_delete_between_mark(mark_t* self, mark_t* other);
 int mark_get_between_mark(mark_t* self, mark_t* other, char** ret_str, size_t* ret_str_len);

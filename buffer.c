@@ -5,7 +5,6 @@
 #include "mledit.h"
 #include "utlist.h"
 
-static int _buffer_substr(buffer_t* self, bline_t* start_line, size_t start_col, bline_t* end_line, size_t end_col, char** ret_data, size_t* ret_data_len, size_t* ret_data_nchars);
 static int _buffer_update(buffer_t* self, baction_t* action);
 static int _buffer_apply_styles(bline_t* start_line, ssize_t line_delta);
 static int _buffer_bline_apply_style_single(srule_t* srule, bline_t* bline);
@@ -31,6 +30,7 @@ buffer_t* buffer_new() {
     buffer->first_line = bline;
     buffer->last_line = bline;
     buffer->line_count = 1;
+    buffer->_mark_counter = 'a';
     return buffer;
 }
 
@@ -38,9 +38,10 @@ buffer_t* buffer_new() {
 int buffer_destroy(buffer_t* self) {
     bline_t* line;
     bline_t* line_tmp;
-    DL_FOREACH_SAFE(self->first_line, line, line_tmp) {
-        DL_DELETE(self->first_line, line);
+    for (line = self->last_line; line; ) {
+        line_tmp = line->prev;
         _buffer_bline_free(line, NULL, 0);
+        line = line_tmp;
     }
     if (self->data) free(self->data);
     return MLEDIT_OK;
@@ -56,6 +57,11 @@ mark_t* buffer_add_mark(buffer_t* self, bline_t* maybe_line, size_t maybe_col) {
     } else {
         mark->bline = self->first_line;
         mark->col = 0;
+    }
+    mark->letter = self->_mark_counter;
+    self->_mark_counter += 1;
+    if (self->_mark_counter > 'z') {
+        self->_mark_counter = 'a';
     }
     DL_APPEND(mark->bline->marks, mark);
     return mark;
@@ -151,7 +157,7 @@ int buffer_insert(buffer_t* self, size_t offset, char* data, size_t data_len, si
     }
 
     // Get inserted data
-    _buffer_substr(self, start_line, start_col, cur_line, cur_col, &ins_data, &ins_data_len, &ins_data_nchars);
+    buffer_substr(self, start_line, start_col, cur_line, cur_col, &ins_data, &ins_data_len, &ins_data_nchars);
 
     // Handle action
     action = calloc(1, sizeof(baction_t));
@@ -203,7 +209,7 @@ int buffer_delete(buffer_t* self, size_t offset, size_t num_chars) {
     }
 
     // Get deleted data
-    _buffer_substr(self, start_line, start_col, end_line, end_col, &del_data, &del_data_len, &del_data_nchars);
+    buffer_substr(self, start_line, start_col, end_line, end_col, &del_data, &del_data_len, &del_data_nchars);
 
     // Delete suffix starting at start_line:start_col
     safe_num_chars = MLEDIT_MIN(num_chars, start_line->char_count - start_col);
@@ -332,13 +338,123 @@ int buffer_remove_srule(buffer_t* self, srule_t* srule) {
     return MLEDIT_ERR;
 }
 
+// Print buffer debug info to stream
+int buffer_debug_dump(buffer_t* self, FILE* stream) {
+    int i;
+    size_t j;
+    bline_t* bline_tmp;
+    srule_node_t* srule_tmp;
+    blistener_t* listener_tmp;
+    baction_t* action_tmp;
+    mark_t* mark_tmp;
+    char* mark_str;
+    size_t mark_str_len;
+    mark_str = NULL;
+    mark_str_len = 0;
+    fprintf(stream, "first_line=%lu\n", self->first_line->line_index);
+    fprintf(stream, "last_line=%lu\n", self->last_line->line_index);
+    fprintf(stream, "byte_count=%lu\n", self->byte_count);
+    fprintf(stream, "char_count=%lu\n", self->char_count);
+    fprintf(stream, "line_count=%lu\n", self->line_count);
+    fprintf(stream, "lines:\n");
+    for (bline_tmp = self->first_line; bline_tmp; bline_tmp = bline_tmp->next) {
+        fprintf(stream, "  %lu\n", bline_tmp->line_index);
+        fprintf(stream, "    data=[%.*s]\n", (int)bline_tmp->data_len, bline_tmp->data ? bline_tmp->data : "");
+        if (bline_tmp->char_count + 1 > mark_str_len) {
+            mark_str = realloc(mark_str, bline_tmp->char_count + 1);
+        }
+        memset(mark_str, ' ', bline_tmp->char_count + 1);
+        DL_FOREACH(bline_tmp->marks, mark_tmp) {
+            *(mark_str + mark_tmp->col) = mark_tmp->letter;
+        }
+        fprintf(stream, "    mark  %.*s\n", (int)(bline_tmp->char_count + 1), mark_str);
+        fprintf(stream, "      fg  ");
+        if (bline_tmp->char_styles) {
+            for (j = 0; j < bline_tmp->char_count; j++) {
+                fprintf(stream, "%c", bline_tmp->char_styles[j].fg ? '*' : ' ');
+            }
+        }
+        fprintf(stream, "\n      bg  ");
+        if (bline_tmp->char_styles) {
+            for (j = 0; j < bline_tmp->char_count; j++) {
+                fprintf(stream, "%c", bline_tmp->char_styles[j].bg ? '*' : ' ');
+            }
+        }
+        fprintf(stream, "\n");
+    }
+    fprintf(stream, "lines_extra:\n");
+    for (bline_tmp = self->first_line; bline_tmp; bline_tmp = bline_tmp->next) {
+        fprintf(stream, "  %lu\n", bline_tmp->line_index);
+        fprintf(stream, "    line_index=%lu\n", bline_tmp->line_index);
+        fprintf(stream, "    char_count=%lu\n", bline_tmp->char_count);
+        fprintf(stream, "    next=%ld\n", bline_tmp->next ? bline_tmp->next->line_index : -1);
+        fprintf(stream, "    prev=%ld\n", bline_tmp->prev ? bline_tmp->prev->line_index : -1);
+        fprintf(stream, "    data_cap=%lu\n", bline_tmp->data_cap);
+        fprintf(stream, "    char_indexes=");
+        if (bline_tmp->char_indexes) {
+            for (j = 0; j < bline_tmp->char_count; j++) {
+                fprintf(stream, "%lu ", bline_tmp->char_indexes[j]);
+            }
+        }
+        fprintf(stream, "\n    char_styles_cap=%lu\n", bline_tmp->char_styles_cap);
+        fprintf(stream, "    char_indexes_cap=%lu\n", bline_tmp->char_indexes_cap);
+    }
+    fprintf(stream, "single_srules:\n");
+    i = 0; DL_FOREACH(self->single_srules, srule_tmp) {
+        fprintf(stream, "  %d\n", i);
+        fprintf(stream, "    type=%d\n", srule_tmp->srule->type);
+        fprintf(stream, "    re=%s\n", srule_tmp->srule->re ? srule_tmp->srule->re : "");
+        fprintf(stream, "    re_end=%s\n", srule_tmp->srule->re_end ? srule_tmp->srule->re_end : "");
+        fprintf(stream, "    cre=%c\n", srule_tmp->srule->cre ? 'y' : 'n');
+        fprintf(stream, "    cre_end=%c\n", srule_tmp->srule->cre_end ? 'y' : 'n');
+        fprintf(stream, "    range_a=%c\n", srule_tmp->srule->range_a ? srule_tmp->srule->range_a->letter : ' ');
+        fprintf(stream, "    range_b=%c\n", srule_tmp->srule->range_b ? srule_tmp->srule->range_b->letter : ' ');
+        fprintf(stream, "    style=%d,%d\n", srule_tmp->srule->style.fg, srule_tmp->srule->style.bg);
+        i++;
+    }
+    fprintf(stream, "multi_srules:\n");
+    i = 0; DL_FOREACH(self->multi_srules, srule_tmp) {
+        fprintf(stream, "  %d\n", i);
+        fprintf(stream, "    type=%d\n", srule_tmp->srule->type);
+        fprintf(stream, "    re=%s\n", srule_tmp->srule->re ? srule_tmp->srule->re : "");
+        fprintf(stream, "    re_end=%s\n", srule_tmp->srule->re_end ? srule_tmp->srule->re_end : "");
+        fprintf(stream, "    cre=%c\n", srule_tmp->srule->cre ? 'y' : 'n');
+        fprintf(stream, "    cre_end=%c\n", srule_tmp->srule->cre_end ? 'y' : 'n');
+        fprintf(stream, "    range_a=%c\n", srule_tmp->srule->range_a ? srule_tmp->srule->range_a->letter : ' ');
+        fprintf(stream, "    range_b=%c\n", srule_tmp->srule->range_b ? srule_tmp->srule->range_b->letter : ' ');
+        fprintf(stream, "    style=%d,%d\n", srule_tmp->srule->style.fg, srule_tmp->srule->style.bg);
+        i++;
+    }
+    i = 0; DL_FOREACH(self->listeners, listener_tmp) { i++; }
+    fprintf(stream, "listeners=%d\n", i);
+    fprintf(stream, "actions:\n");
+    i = 0; DL_FOREACH(self->actions, action_tmp) {
+        fprintf(stream, "  %d\n", i);
+        fprintf(stream, "    type=%d\n", action_tmp->type);
+        fprintf(stream, "    start_line_index=%lu\n", action_tmp->start_line_index);
+        fprintf(stream, "    start_col=%lu\n", action_tmp->start_col);
+        fprintf(stream, "    maybe_end_line_index=%lu\n", action_tmp->maybe_end_line_index);
+        fprintf(stream, "    maybe_end_col=%lu\n", action_tmp->maybe_end_col);
+        fprintf(stream, "    byte_delta=%ld\n", action_tmp->byte_delta);
+        fprintf(stream, "    char_delta=%ld\n", action_tmp->char_delta);
+        fprintf(stream, "    data=%.*s\n", (int)action_tmp->data_len, action_tmp->data);
+        fprintf(stream, "    line_delta=%ld\n", action_tmp->line_delta);
+    }
+    fprintf(stream, "action_tail=%c\n", self->action_tail ? 'y' : 'n');
+    fprintf(stream, "action_undone=%c\n", self->action_undone ? 'y' : 'n');
+    fprintf(stream, "data=%.*s\n", (int)self->data_len, self->data ? self->data : "");
+    fprintf(stream, "is_data_dirty=%d\n", self->is_data_dirty);
+    if (mark_str) free(mark_str);
+    return MLEDIT_OK;
+}
+
 int buffer_undo(buffer_t* self); // TODO
 int buffer_redo(buffer_t* self); // TODO
 int buffer_repeat_at(buffer_t* self, size_t offset); // TODO
 int buffer_add_listener(buffer_t* self, blistener_t blistener); // TODO
 
 // Return data from start_line:start_col thru end_line:end_col
-static int _buffer_substr(buffer_t* self, bline_t* start_line, size_t start_col, bline_t* end_line, size_t end_col, char** ret_data, size_t* ret_data_len, size_t* ret_data_nchars) {
+int buffer_substr(buffer_t* self, bline_t* start_line, size_t start_col, bline_t* end_line, size_t end_col, char** ret_data, size_t* ret_data_len, size_t* ret_data_nchars) {
     char* data;
     size_t data_len;
     size_t data_size;

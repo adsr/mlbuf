@@ -70,6 +70,7 @@ void edit_drop_range_mark() {
         range_a = NULL;
         range_b = NULL;
     }
+    buffer_debug_dump(buf, stderr);
 }
 
 void edit_render() {
@@ -80,7 +81,6 @@ void edit_render() {
     h = tb_height();
     for (line = buf->first_line, i = 0; line && i < h; line = line->next, i++) {
         snprintf(str, 5, "%lu", line->line_index);
-        //fprintf(stderr, "line=%lu next=%lu prev=%lu\n", line->line_index, line->next ? line->next->line_index : 9999, line->prev ? line->prev->line_index : 9999 );
         for (j = 0; j < strlen(str) && j < 2; j++) tb_change_cell(j, i, *(str + j), 0, 0);
         for (; j < 2; j++) tb_change_cell(j, i, ' ', 0, 0);
         for (j = 0; j < w - 3 && j <= line->char_count; j++) {
@@ -91,7 +91,6 @@ void edit_render() {
                     break;
                 }
             }
-fprintf(stderr, "c[%d].fg=%d\n", j, j < line->char_count ? line->char_styles[j].fg : 0);
             tb_change_cell(
                 j+3, i,
                 j < line->char_count ? line->data[line->char_indexes[j]] : ' ',
@@ -100,8 +99,6 @@ fprintf(stderr, "c[%d].fg=%d\n", j, j < line->char_count ? line->char_styles[j].
             );
         }
     }
-    //fprintf(stderr, "first=%lu last=%lu\n", buf->first_line->line_index, buf->last_line->line_index);
-    //fflush(stderr);
 }
 
 int main(int argc, char** argv) {

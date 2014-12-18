@@ -21,3 +21,4 @@ clean:
 	rm -f *.o
 	rm -f libmledit.a libmledit.so
 	make -C tests clean
+	make -C demo clean

@@ -14,6 +14,7 @@ srule_t* s_number;
 srule_t* s_identifiers;
 srule_t* s_strings1;
 srule_t* s_strings2;
+srule_t* s_multi_string;
 srule_t* s_multi_comment;
 srule_t* s_comment;
 srule_t* s_green;
@@ -31,6 +32,7 @@ void edit_init() {
     s_strings1 = srule_new_single("'([^']|(\\'))*'", sizeof("'([^']|(\\'))*'"), TB_YELLOW, 0);
     s_strings2 = srule_new_single("\"([^\"]|(\\\"))*\"", sizeof("\"([^\"]|(\\\"))*\""), TB_YELLOW | TB_BOLD, 0);
     s_multi_comment = srule_new_multi("/\\*", sizeof("/\\*"), "\\*/", sizeof("\\*/"), TB_CYAN, 0);
+    s_multi_string = srule_new_multi("\\[\\[", sizeof("\\[\\["), "\\]\\]", sizeof("\\]\\]"), TB_YELLOW | TB_BOLD, 0);
     s_comment = srule_new_single("//.*", sizeof("//.*"), TB_CYAN, 0);
     s_green = srule_new_single("\\s+$", sizeof("\\s+$"), 0, TB_GREEN);
     buffer_add_srule(buf, s_number);
@@ -38,6 +40,7 @@ void edit_init() {
     buffer_add_srule(buf, s_strings1);
     buffer_add_srule(buf, s_strings2);
     buffer_add_srule(buf, s_multi_comment);
+    buffer_add_srule(buf, s_multi_string);
     buffer_add_srule(buf, s_comment);
     buffer_add_srule(buf, s_green);
     range_a = NULL;
@@ -59,14 +62,13 @@ void edit_drop_range_mark() {
     if (!range_a) {
         range_a = buffer_add_mark(buf, cursor->bline, cursor->col);
     } else if (!range_b) {
-        range_a = buffer_add_mark(buf, cursor->bline, cursor->col);
+        range_b = buffer_add_mark(buf, cursor->bline, cursor->col);
         s_range = srule_new_range(range_a, range_b, TB_REVERSE, TB_REVERSE);
         buffer_add_srule(buf, s_range);
     } else {
         buffer_remove_srule(buf, s_range);
         range_a = NULL;
         range_b = NULL;
-        range_a = buffer_add_mark(buf, cursor->bline, cursor->col);
     }
 }
 

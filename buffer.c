@@ -18,9 +18,9 @@ static size_t _buffer_bline_delete(bline_t* bline, size_t col, size_t num_chars)
 static size_t _buffer_bline_col_to_index(bline_t* bline, size_t col);
 static size_t _buffer_bline_index_to_col(bline_t* bline, size_t index);
 static int _buffer_bline_count_chars(bline_t* bline);
-static int _srule_multi_find(srule_t* rule, int find_end, bline_t* bline, size_t start_offset, size_t* ret_offset);
-static int _srule_multi_find_start(srule_t* rule, bline_t* bline, size_t start_offset, size_t* ret_offset);
-static int _srule_multi_find_end(srule_t* rule, bline_t* bline, size_t start_offset, size_t* ret_offset);
+static int _srule_multi_find(srule_t* rule, int find_end, bline_t* bline, size_t start_offset, size_t* ret_start, size_t* ret_stop);
+static int _srule_multi_find_start(srule_t* rule, bline_t* bline, size_t start_offset, size_t* ret_start, size_t* ret_stop);
+static int _srule_multi_find_end(srule_t* rule, bline_t* bline, size_t start_offset, size_t* ret_stop);
 
 // Make a new buffer and return it
 buffer_t* buffer_new() {
@@ -489,7 +489,7 @@ static int _buffer_apply_styles(bline_t* start_line, ssize_t line_delta) {
                 cur_line->eol_rule = NULL;
                 DL_FOREACH(start_line->buffer->multi_srules, srule_node) {
                     _buffer_bline_apply_style_multi(srule_node->srule, cur_line, &open_rule);
-                    if (open_rule) {
+                    if (open_rule) { // TODO multiple open_rules per line
                         // We have an open_rule; break
                         break;
                     }
@@ -522,18 +522,17 @@ static int _buffer_bline_apply_style_single(srule_t* srule, bline_t* bline) {
     int rc;
     int substrs[3];
     size_t start;
-    size_t end;
+    size_t stop;
     size_t look_offset;
     look_offset = 0;
     while (look_offset < bline->char_count) {
         if ((rc = pcre_exec(srule->cre, NULL, bline->data, bline->data_len, look_offset, 0, substrs, 3)) >= 0) {
             start = _buffer_bline_index_to_col(bline, substrs[0]);
-            end = _buffer_bline_index_to_col(bline, substrs[1]);
-fprintf(stderr, "matched rule[%s] start=%d(%d) end=%d(%d) line[%*.*s]\n", srule->re, start, substrs[0], end, substrs[1], bline->data_len, bline->data_len, bline->data);
-            for (; start < end; start++) {
+            stop = _buffer_bline_index_to_col(bline, substrs[1]);
+            for (; start < stop; start++) {
                 bline->char_styles[start] = srule->style;
             }
-            look_offset = end + 1;
+            look_offset = stop;
         } else {
             break;
         }
@@ -543,6 +542,7 @@ fprintf(stderr, "matched rule[%s] start=%d(%d) end=%d(%d) line[%*.*s]\n", srule-
 
 static int _buffer_bline_apply_style_multi(srule_t* srule, bline_t* bline, srule_t** open_rule) {
     size_t start;
+    size_t start_stop;
     size_t end;
     int found_start;
     int found_end;
@@ -554,12 +554,12 @@ static int _buffer_bline_apply_style_multi(srule_t* srule, bline_t* bline, srule
         found_end = 0;
         if (*open_rule == NULL) {
             // Look for start and end of rule
-            if ((found_start = _srule_multi_find_start(srule, bline, look_offset, &start))) {
-                look_offset = start + 1;
+            if ((found_start = _srule_multi_find_start(srule, bline, look_offset, &start, &start_stop))) {
+                look_offset = start_stop;
                 found_end = look_offset < bline->char_count
                     ? _srule_multi_find_end(srule, bline, look_offset, &end)
                     : 0;
-                if (found_end) look_offset = end + 1;
+                if (found_end) look_offset = end;
             } else {
                 return MLEDIT_OK; // No match; bail
             }
@@ -585,7 +585,7 @@ static int _buffer_bline_apply_style_multi(srule_t* srule, bline_t* bline, srule
         }
 
         // Range rules can only match once
-        if (srule->type == MLEDIT_SRULE_TYPE_SINGLE) {
+        if (srule->type == MLEDIT_SRULE_TYPE_RANGE) {
             break;
         }
     } while (found_start && found_end && look_offset < bline->char_count);
@@ -893,7 +893,7 @@ int srule_destroy(srule_t* srule) {
     return MLEDIT_OK;
 }
 
-static int _srule_multi_find(srule_t* rule, int find_end, bline_t* bline, size_t start_offset, size_t* ret_offset) {
+static int _srule_multi_find(srule_t* rule, int find_end, bline_t* bline, size_t start_offset, size_t* ret_start, size_t* ret_stop) {
     int rc;
     pcre* cre;
     int substrs[3];
@@ -904,8 +904,9 @@ static int _srule_multi_find(srule_t* rule, int find_end, bline_t* bline, size_t
         mark = mark_is_gt(rule->range_a, rule->range_b)
             ? (find_end ? rule->range_a : rule->range_b)
             : (find_end ? rule->range_b : rule->range_a);
-        if (mark->bline == bline) {
-            *ret_offset = MLEDIT_MIN(bline->char_count - 1, mark->col);
+        if (mark->bline == bline && mark->col >= start_offset) {
+            *ret_start = mark->col;
+            *ret_stop = mark->col;
             return 1;
         }
         return 0;
@@ -915,16 +916,18 @@ static int _srule_multi_find(srule_t* rule, int find_end, bline_t* bline, size_t
     cre = find_end ? rule->cre_end : rule->cre;
     start_index = _buffer_bline_col_to_index(bline, start_offset);
     if ((rc = pcre_exec(cre, NULL, bline->data, bline->data_len, start_index, 0, substrs, 3)) >= 0) {
-        *ret_offset = _buffer_bline_index_to_col(bline, substrs[find_end ? 1 : 0]);
+        *ret_start = _buffer_bline_index_to_col(bline, substrs[0]);
+        *ret_stop = _buffer_bline_index_to_col(bline, substrs[1]);
         return 1;
     }
     return 0;
 }
 
-static int _srule_multi_find_start(srule_t* rule, bline_t* bline, size_t start_offset, size_t* ret_offset) {
-    return _srule_multi_find(rule, 0, bline, start_offset, ret_offset);
+static int _srule_multi_find_start(srule_t* rule, bline_t* bline, size_t start_offset, size_t* ret_start, size_t* ret_stop) {
+    return _srule_multi_find(rule, 0, bline, start_offset, ret_start, ret_stop);
 }
 
-static int _srule_multi_find_end(srule_t* rule, bline_t* bline, size_t start_offset, size_t* ret_offset) {
-    return _srule_multi_find(rule, 1, bline, start_offset, ret_offset);
+static int _srule_multi_find_end(srule_t* rule, bline_t* bline, size_t start_offset, size_t* ret_stop) {
+    size_t ignore;
+    return _srule_multi_find(rule, 1, bline, start_offset, &ignore, ret_stop);
 }

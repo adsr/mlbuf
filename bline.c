@@ -17,7 +17,7 @@ int bline_delete(bline_t* self, size_t col, size_t num_chars) {
 // Return a col given a byte index
 int bline_get_col(bline_t* self, size_t index, size_t* ret_col) {
     size_t col;
-    if (index == 0) {
+    if (index == 0 || self->char_count == 0) {
         *ret_col = 0;
         return MLEDIT_OK;
     } else if (index >= self->data_len) {
@@ -28,8 +28,11 @@ int bline_get_col(bline_t* self, size_t index, size_t* ret_col) {
         if (self->char_indexes[col] > index) {
             *ret_col = col - 1;
             return MLEDIT_OK;
+        } else if (self->char_indexes[col] == index) {
+            *ret_col = col;
+            return MLEDIT_OK;
         }
     }
-    *ret_col = self->char_count - 1;
+    *ret_col = self->char_count - (index < self->data_len ? 1 : 0);
     return MLEDIT_OK;
 }

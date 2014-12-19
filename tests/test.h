@@ -1,3 +1,18 @@
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include "../mledit.h"
+
+#define MAIN(str, body) \
+int main(int argc, char **argv) { \
+    buffer_t* buf; \
+    buf = buffer_new(); \
+    buffer_insert(buf, 0, (char*)str, (size_t)strlen(str), NULL); \
+    body \
+    buffer_destroy(buf); \
+    return EXIT_SUCCESS; \
+}
+
 #define ASSERT(testname, expected, observed) do { \
     if ((expected) == (observed)) { \
         printf("  \x1b[32mOK \x1b[0m %s\n", (testname)); \

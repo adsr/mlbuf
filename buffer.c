@@ -5,7 +5,10 @@
 #include "mledit.h"
 #include "utlist.h"
 
+static int _buffer_baction_do(buffer_t* self, bline_t* bline, baction_t* action, int is_redo, size_t* opt_repeat_offset);
 static int _buffer_update(buffer_t* self, baction_t* action);
+static int _buffer_truncate_undo_stack(buffer_t* self, baction_t* action_from);
+static int _buffer_add_to_undo_stack(buffer_t* self, baction_t* action);
 static int _buffer_apply_styles(bline_t* start_line, ssize_t line_delta);
 static int _buffer_bline_apply_style_single(srule_t* srule, bline_t* bline);
 static int _buffer_bline_apply_style_multi(srule_t* srule, bline_t* bline, srule_t** open_rule);
@@ -20,6 +23,7 @@ static int _buffer_bline_count_chars(bline_t* bline);
 static int _srule_multi_find(srule_t* rule, int find_end, bline_t* bline, size_t start_offset, size_t* ret_start, size_t* ret_stop);
 static int _srule_multi_find_start(srule_t* rule, bline_t* bline, size_t start_offset, size_t* ret_start, size_t* ret_stop);
 static int _srule_multi_find_end(srule_t* rule, bline_t* bline, size_t start_offset, size_t* ret_stop);
+static int _baction_destroy(baction_t* action);
 
 // Make a new buffer and return it
 buffer_t* buffer_new() {
@@ -38,12 +42,18 @@ buffer_t* buffer_new() {
 int buffer_destroy(buffer_t* self) {
     bline_t* line;
     bline_t* line_tmp;
+    baction_t* action;
+    baction_t* action_tmp;
     for (line = self->last_line; line; ) {
         line_tmp = line->prev;
         _buffer_bline_free(line, NULL, 0);
         line = line_tmp;
     }
     if (self->data) free(self->data);
+    DL_FOREACH_SAFE(self->actions, action, action_tmp) {
+        DL_DELETE(self->actions, action);
+        _baction_destroy(action);
+    }
     return MLEDIT_OK;
 }
 
@@ -202,7 +212,7 @@ int buffer_delete(buffer_t* self, size_t offset, size_t num_chars) {
     buffer_get_bline_col(self, offset + num_chars, &end_line, &end_col);
 
     // Exit early if there is nothing to delete
-    if (start_line == end_line && start_col == end_col) {
+    if (start_line == end_line && start_col >= end_col) {
         return MLEDIT_OK;
     } else if (start_line == self->last_line && start_col == self->last_line->char_count) {
         return MLEDIT_OK;
@@ -260,6 +270,18 @@ int buffer_delete(buffer_t* self, size_t offset, size_t num_chars) {
     _buffer_update(self, action);
 
     return MLEDIT_OK;
+}
+
+// Return a line given a line_index
+int buffer_get_bline(buffer_t* self, size_t line_index, bline_t** ret_bline) {
+    bline_t* tmp_line;
+    for (tmp_line = self->first_line; tmp_line; tmp_line = tmp_line->next) {
+        if (tmp_line->line_index == line_index) {
+            *ret_bline = tmp_line;
+            return MLEDIT_OK;
+        }
+    }
+    return MLEDIT_ERR;
 }
 
 // Return a line and col for the given offset
@@ -448,11 +470,6 @@ int buffer_debug_dump(buffer_t* self, FILE* stream) {
     return MLEDIT_OK;
 }
 
-int buffer_undo(buffer_t* self); // TODO
-int buffer_redo(buffer_t* self); // TODO
-int buffer_repeat_at(buffer_t* self, size_t offset); // TODO
-int buffer_add_listener(buffer_t* self, blistener_t blistener); // TODO
-
 // Return data from start_line:start_col thru end_line:end_col
 int buffer_substr(buffer_t* self, bline_t* start_line, size_t start_col, bline_t* end_line, size_t end_col, char** ret_data, size_t* ret_data_len, size_t* ret_data_nchars) {
     char* data;
@@ -519,6 +536,96 @@ int buffer_substr(buffer_t* self, bline_t* start_line, size_t start_col, bline_t
     return MLEDIT_OK;
 }
 
+// Undo an action
+int buffer_undo(buffer_t* self) {
+    baction_t* action_to_undo;
+    bline_t* bline;
+    int rc;
+
+    // Find action to undo
+    if (self->action_undone) {
+        if (self->action_undone == self->actions) {
+            return MLEDIT_ERR;
+        } else if (!self->action_undone->prev) {
+            return MLEDIT_ERR;
+        }
+        action_to_undo = self->action_undone->prev;
+    } else if (self->action_tail) {
+        action_to_undo = self->action_tail;
+    } else {
+        return MLEDIT_ERR;
+    }
+
+    // Get line to perform undo on
+    bline = NULL;
+    buffer_get_bline(self, action_to_undo->start_line_index, &bline);
+    if (!bline) {
+        return MLEDIT_ERR;
+    } else if (action_to_undo->start_col > bline->char_count) {
+        return MLEDIT_ERR;
+    }
+
+    // Perform action
+    rc = _buffer_baction_do(self, bline, action_to_undo, 0, NULL);
+
+    // Update action_undone
+    if (rc == MLEDIT_OK) {
+        self->action_undone = action_to_undo;
+    }
+    return rc;
+}
+
+// Redo an undone action
+int buffer_redo(buffer_t* self) {
+    baction_t* action_to_redo;
+    bline_t* bline;
+    int rc;
+
+    // Find action to undo
+    if (!self->action_undone) {
+        return MLEDIT_ERR;
+    }
+    action_to_redo = self->action_undone;
+
+    // Get line to perform undo on
+    bline = NULL;
+    buffer_get_bline(self, action_to_redo->start_line_index, &bline);
+    if (!bline) {
+        return MLEDIT_ERR;
+    } else if (action_to_redo->start_col > bline->char_count) {
+        return MLEDIT_ERR;
+    }
+
+    // Perform action
+    rc = _buffer_baction_do(self, bline, action_to_redo, 1, NULL);
+
+    // Update action_undone
+    if (rc == MLEDIT_OK) {
+        self->action_undone = self->action_undone->next;
+    }
+    return rc;
+}
+
+int buffer_add_listener(buffer_t* self, blistener_t blistener); // TODO
+
+static int _buffer_baction_do(buffer_t* self, bline_t* bline, baction_t* action, int is_redo, size_t* opt_repeat_offset) {
+    int rc;
+    size_t col;
+    size_t offset;
+    self->_is_in_undo = 1;
+    col = opt_repeat_offset ? *opt_repeat_offset : action->start_col;
+    buffer_get_offset(self, bline, col, &offset);
+    if ((action->type == MLEDIT_BACTION_TYPE_DELETE && is_redo)
+        || (action->type == MLEDIT_BACTION_TYPE_INSERT && !is_redo)
+    ) {
+        rc = buffer_delete(self, offset, (size_t)((is_redo ? -1 : 1) * action->char_delta));
+    } else {
+        rc = buffer_insert(self, offset, action->data, action->data_len, NULL);
+    }
+    self->_is_in_undo = 0;
+    return rc;
+}
+
 static int _buffer_update(buffer_t* self, baction_t* action) {
     bline_t* tmp_line;
     bline_t* last_line;
@@ -542,10 +649,49 @@ static int _buffer_update(buffer_t* self, baction_t* action) {
     // Restyle from start_line
     _buffer_apply_styles(action->start_line, action->line_delta);
 
-    // TODO handle undo stack
+    // Handle undo stack
+    if (self->_is_in_undo) {
+        _baction_destroy(action);
+    } else {
+        _buffer_add_to_undo_stack(self, action);
+    }
 
     // TODO raise events
 
+    return MLEDIT_OK;
+}
+
+static int _buffer_truncate_undo_stack(buffer_t* self, baction_t* action_from) {
+    baction_t* action_target;
+    baction_t* action_tmp;
+    int do_delete;
+    self->action_tail = action_from->prev;
+    do_delete = 0;
+    DL_FOREACH_SAFE(self->actions, action_target, action_tmp) {
+        if (!do_delete && action_target == action_from) {
+            do_delete = 1;
+        }
+        if (do_delete) {
+            DL_DELETE(self->actions, action_target);
+            _baction_destroy(action_target);
+        }
+    }
+    return MLEDIT_OK;
+}
+
+static int _buffer_add_to_undo_stack(buffer_t* self, baction_t* action) {
+    if (self->action_undone) {
+        // We are recording an action after an undo has been performed, so we
+        // need to chop off the tail of the baction list before recording the
+        // new one.
+        // TODO could implement multilevel undo here instead
+        _buffer_truncate_undo_stack(self, self->action_undone);
+        self->action_undone = NULL;
+    }
+
+    // Append action to list
+    DL_APPEND(self->actions, action);
+    self->action_tail = action;
     return MLEDIT_OK;
 }
 
@@ -1046,4 +1192,10 @@ static int _srule_multi_find_start(srule_t* rule, bline_t* bline, size_t start_o
 static int _srule_multi_find_end(srule_t* rule, bline_t* bline, size_t start_offset, size_t* ret_stop) {
     size_t ignore;
     return _srule_multi_find(rule, 1, bline, start_offset, &ignore, ret_stop);
+}
+
+static int _baction_destroy(baction_t* action) {
+    if (action->data) free(action->data);
+    free(action);
+    return MLEDIT_OK;
 }

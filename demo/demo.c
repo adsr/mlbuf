@@ -114,6 +114,8 @@ int main(int argc, char** argv) {
             else if (ev.key == TB_KEY_CTRL_A)      { mark_move_bol(cursor); }
             else if (ev.key == TB_KEY_CTRL_E)      { mark_move_eol(cursor); }
             else if (ev.key == TB_KEY_CTRL_D)      { edit_drop_range_mark(); }
+            else if (ev.key == TB_KEY_CTRL_Z)      { buffer_undo(buf); }
+            else if (ev.key == TB_KEY_CTRL_Y)      { buffer_redo(buf); }
             else if (ev.key == TB_KEY_BACKSPACE)   { edit_delete(1); }
             else if (ev.key == TB_KEY_BACKSPACE2)  { edit_delete(1); }
             else if (ev.key == TB_KEY_ARROW_LEFT)  { mark_move_by(cursor, -1); }

@@ -289,12 +289,11 @@ int buffer_get_bline(buffer_t* self, size_t line_index, bline_t** ret_bline) {
 // Return a line and col for the given offset
 int buffer_get_bline_col(buffer_t* self, size_t offset, bline_t** ret_bline, size_t* ret_col) {
     bline_t* tmp_line;
-    bline_t* prev_line;
+    bline_t* good_line;
     size_t remaining_chars;
 
     remaining_chars = offset;
     for (tmp_line = self->first_line; tmp_line != NULL; tmp_line = tmp_line->next) {
-        prev_line = tmp_line->prev;
         if (tmp_line->char_count >= remaining_chars) {
             *ret_bline = tmp_line;
             *ret_col = remaining_chars;
@@ -302,11 +301,12 @@ int buffer_get_bline_col(buffer_t* self, size_t offset, bline_t** ret_bline, siz
         } else {
             remaining_chars -= (tmp_line->char_count + 1); // Plus 1 for newline
         }
+        good_line = tmp_line;
     }
 
-    if (!prev_line) prev_line = self->first_line;
-    *ret_bline = prev_line;
-    *ret_col = prev_line->char_count;
+    if (!good_line) good_line = self->first_line;
+    *ret_bline = good_line;
+    *ret_col = good_line->char_count;
     return MLEDIT_OK;
 }
 
@@ -318,7 +318,7 @@ int buffer_get_offset(buffer_t* self, bline_t* bline, size_t col, size_t* ret_of
     offset = 0;
     for (tmp_line = self->first_line; tmp_line != bline->next; tmp_line = tmp_line->next) {
         if (tmp_line == bline) {
-            offset += col;
+            offset = MLEDIT_MIN(self->char_count, offset + col);
             break;
         } else {
             offset += tmp_line->char_count + 1; // Plus 1 for newline

@@ -1,6 +1,6 @@
 #include "test.h"
 
 MAIN("hello\nworld",
-    // TODO
+    ASSERT("yes", 1, 1);
 )
 

@@ -344,22 +344,26 @@ int buffer_add_srule(buffer_t* self, srule_t* srule) {
 
 // Remove a style rule from the buffer
 int buffer_remove_srule(buffer_t* self, srule_t* srule) {
-    srule_node_t* head;
+    int found;
+    srule_node_t** head;
     srule_node_t* node;
     srule_node_t* node_tmp;
     if (srule->type == MLEDIT_SRULE_TYPE_SINGLE) {
-        head = self->single_srules;
+        head = &self->single_srules;
     } else {
-        head = self->multi_srules;
+        head = &self->multi_srules;
     }
-    DL_FOREACH_SAFE(head, node, node_tmp) {
+    found = 0;
+    DL_FOREACH_SAFE(*head, node, node_tmp) {
         if (node->srule == srule) {
-            DL_DELETE(head, node);
+            DL_DELETE(*head, node);
             free(node);
-            return _buffer_apply_styles(self->first_line, self->line_count - 1);
+            found = 1;
+            break;
         }
     }
-    return MLEDIT_ERR;
+    if (!found) return MLEDIT_ERR;
+    return _buffer_apply_styles(self->first_line, self->line_count - 1);
 }
 
 // Print buffer debug info to stream

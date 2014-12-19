@@ -13,4 +13,5 @@ MAIN("hello\nworld",
         ASSERT("line2fg", 1, buf->first_line->next->char_styles[i].fg);
         ASSERT("line2bg", 2, buf->first_line->next->char_styles[i].bg);
     }
+    srule_destroy(srule);
 )

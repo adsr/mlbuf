@@ -95,8 +95,10 @@ int buffer_get(buffer_t* self, char** ret_data, size_t* ret_data_len) {
                 data_cursor += bline->data_len;
                 self->data_len += bline->data_len;
             }
-            *data_cursor = '\n';
-            data_cursor += 1;
+            if (bline->next) {
+                *data_cursor = '\n';
+                data_cursor += 1;
+            }
         }
         *data_cursor = '\0';
         self->data_len = (size_t)(data_cursor - self->data);

@@ -1,6 +1,22 @@
 #include "test.h"
 
 MAIN("hello\nworld",
-    // TODO
-)
+    char *data;
+    size_t data_len;
 
+    bline_delete(buf->first_line, 0, 1);
+    buffer_get(buf, &data, &data_len);
+    ASSERT("bol", 0, strncmp(data, "ello\nworld", data_len));
+
+    bline_delete(buf->first_line, 0, 0);
+    buffer_get(buf, &data, &data_len);
+    ASSERT("noop", 0, strncmp(data, "ello\nworld", data_len));
+
+    bline_delete(buf->first_line->next, 4, 1);
+    buffer_get(buf, &data, &data_len);
+    ASSERT("eol", 0, strncmp(data, "ello\nworl", data_len));
+
+    bline_delete(buf->first_line, 1, 2);
+    buffer_get(buf, &data, &data_len);
+    ASSERT("mid", 0, strncmp(data, "eo\nworl", data_len));
+)

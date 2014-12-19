@@ -4,14 +4,14 @@
 #include <pcre.h>
 #include "mledit.h"
 
-typedef char* (*mark_find_match_fn)(char* haystack, size_t haystack_len, void* u1, void* u2, size_t* ret_match_len);
+typedef char* (*mark_find_match_fn)(char* haystack, size_t haystack_len, size_t max_offset, void* u1, void* u2, size_t* ret_match_len);
 static int mark_find_match(mark_t* self, mark_find_match_fn matchfn, void* u1, void* u2, int reverse, bline_t** ret_line, size_t* ret_col);
-static char* mark_find_match_prev(char* haystack, size_t haystack_len, mark_find_match_fn matchfn, void* u1, void* u2);
+static char* mark_find_match_prev(char* haystack, size_t haystack_len, size_t max_offset, mark_find_match_fn matchfn, void* u1, void* u2);
 static int mark_find_re(mark_t* self, char* re, size_t re_len, int reverse, bline_t** ret_line, size_t* ret_col);
-static char* mark_find_next_str_matchfn(char* haystack, size_t haystack_len, void* needle, void* needle_len, size_t* ret_needle_len);
-static char* mark_find_prev_str_matchfn(char* haystack, size_t haystack_len, void* needle, void* needle_len, size_t* ret_needle_len);
-static char* mark_find_next_cre_matchfn(char* haystack, size_t haystack_len, void* cre, void* unused, size_t* ret_needle_len);
-static char* mark_find_prev_cre_matchfn(char* haystack, size_t haystack_len, void* cre, void* unused, size_t* ret_needle_len);
+static char* mark_find_next_str_matchfn(char* haystack, size_t haystack_len, size_t max_offset, void* needle, void* needle_len, size_t* ret_needle_len);
+static char* mark_find_prev_str_matchfn(char* haystack, size_t haystack_len, size_t max_offset, void* needle, void* needle_len, size_t* ret_needle_len);
+static char* mark_find_next_cre_matchfn(char* haystack, size_t haystack_len, size_t max_offset, void* cre, void* unused, size_t* ret_needle_len);
+static char* mark_find_prev_cre_matchfn(char* haystack, size_t haystack_len, size_t max_offset, void* cre, void* unused, size_t* ret_needle_len);
 
 // Return a clone (same position) of an existing mark
 mark_t* mark_clone(mark_t* self) {
@@ -59,6 +59,11 @@ int mark_move_by(mark_t* self, ssize_t char_delta) {
             MLEDIT_MAX(0, (ssize_t)offset + char_delta)
         )
     );
+}
+
+// Get mark offset
+int mark_get_offset(mark_t* self, size_t* ret_offset) {
+    return buffer_get_offset(self->bline->buffer, self->bline, self->col, ret_offset);
 }
 
 // Move mark by line delta
@@ -137,7 +142,7 @@ int mark_find_next_cre(mark_t* self, pcre* cre, bline_t** ret_line, size_t* ret_
 
 // Find prev occurence of regex from mark
 int mark_find_prev_cre(mark_t* self, pcre* cre, bline_t** ret_line, size_t* ret_col) {
-    return mark_find_match(self, mark_find_prev_cre_matchfn, (void*)cre, NULL, 0, ret_line, ret_col);
+    return mark_find_match(self, mark_find_prev_cre_matchfn, (void*)cre, NULL, 1, ret_line, ret_col);
 }
 
 // Find next occurence of uncompiled regex str from mark
@@ -204,8 +209,9 @@ int mark_find_bracket_pair(mark_t* self, size_t max_chars, bline_t** ret_line, s
     }
     // Now look for targ, keeping track of nesting
     // Break if we look at more than max_chars
-    nest = 0;
-    col = MLEDIT_MAX(1, self->col) - 1;
+    nest = -1;
+    cur_line = self->bline;
+    col = self->col;
     nchars = 0;
     while (cur_line) {
         for (; col >= 0 && col < cur_line->char_count; col += dir) {
@@ -341,17 +347,20 @@ static int mark_find_match(mark_t* self, mark_find_match_fn matchfn, void* u1, v
     size_t search_start;
     size_t search_len;
     size_t match_col;
+    size_t max_offset;
     search_line = self->bline;
     if (reverse) {
         search_start = 0;
-        search_len = self->col < search_line->char_count ? search_line->char_indexes[self->col] : search_line->data_len;
+        search_len = search_line->data_len;
+        max_offset = self->col - 1;
     } else {
-        search_start = self->col < search_line->char_count ? search_line->char_indexes[self->col] : search_line->data_len;
+        search_start = self->col + 1 < search_line->char_count ? search_line->char_indexes[self->col + 1] : search_line->data_len;
         search_len = search_line->data_len - search_start;
+        max_offset = search_line->char_count - 1;
     }
     while (search_line) {
         if (search_line->char_count > 0 && search_len > 0) {
-            match = matchfn(search_line->data + search_start, search_len, u1, u2, NULL);
+            match = matchfn(search_line->data + search_start, search_len, max_offset, u1, u2, NULL);
             if (match != NULL) {
                 bline_get_col(search_line, (size_t)(match - search_line->data), &match_col);
                 *ret_line = search_line;
@@ -370,17 +379,26 @@ static int mark_find_match(mark_t* self, mark_find_match_fn matchfn, void* u1, v
 }
 
 // Return the last occurrence of a match given a forward-searching matchfn
-static char* mark_find_match_prev(char* haystack, size_t haystack_len, mark_find_match_fn matchfn, void* u1, void* u2) {
+static char* mark_find_match_prev(char* haystack, size_t haystack_len, size_t max_offset, mark_find_match_fn matchfn, void* u1, void* u2) {
+    char* ohaystack;
     char* match;
     char* last_match;
     size_t next_offset;
     size_t match_len;
+    ohaystack = haystack;
     last_match = NULL;
     while (1) {
-        match = matchfn(haystack, haystack_len, u1, u2, &match_len);
+        match = matchfn(haystack, haystack_len, max_offset, u1, u2, &match_len);
         if (match == NULL) {
             return last_match;
         }
+        if ((size_t)(match - ohaystack) > max_offset) {
+            return last_match;
+        }
+        // Override match_len to 1. Reasoning: If we have a haystack like
+        // 'banana' and our re is 'ana', using the actual match_len for the
+        // next search offset would skip the 2nd 'ana' match.
+        match_len = 1;
         next_offset = (size_t)(match - haystack) + match_len;
         if (next_offset + match_len > haystack_len) {
             return match;
@@ -415,25 +433,25 @@ static int mark_find_re(mark_t* self, char* re, size_t re_len, int reverse, blin
     return rc;
 }
 
-static char* mark_find_next_str_matchfn(char* haystack, size_t haystack_len, void* needle, void* needle_len, size_t* ret_needle_len) {
+static char* mark_find_next_str_matchfn(char* haystack, size_t haystack_len, size_t max_offset, void* needle, void* needle_len, size_t* ret_needle_len) {
     if (ret_needle_len) *ret_needle_len = *((size_t*)needle_len);
     return memmem(haystack, haystack_len, needle, *((size_t*)needle_len));
 }
 
-static char* mark_find_prev_str_matchfn(char* haystack, size_t haystack_len, void* needle, void* needle_len, size_t* ret_needle_len) {
-    return mark_find_match_prev(haystack, haystack_len, mark_find_next_str_matchfn, needle, needle_len);
+static char* mark_find_prev_str_matchfn(char* haystack, size_t haystack_len, size_t max_offset, void* needle, void* needle_len, size_t* ret_needle_len) {
+    return mark_find_match_prev(haystack, haystack_len, max_offset, mark_find_next_str_matchfn, needle, needle_len);
 }
 
-static char* mark_find_next_cre_matchfn(char* haystack, size_t haystack_len, void* cre, void* unused, size_t* ret_needle_len) {
+static char* mark_find_next_cre_matchfn(char* haystack, size_t haystack_len, size_t max_offset, void* cre, void* unused, size_t* ret_needle_len) {
     int rc;
     int substrs[3];
     if ((rc = pcre_exec((pcre*)cre, NULL, haystack, haystack_len, 0, 0, substrs, 3)) >= 0) {
         if (ret_needle_len) *ret_needle_len = (size_t)(substrs[1] - substrs[0]);
-        return haystack + rc;
+        return haystack + substrs[0];
     }
     return NULL;
 }
 
-static char* mark_find_prev_cre_matchfn(char* haystack, size_t haystack_len, void* cre, void* unused, size_t* ret_needle_len) {
-    return mark_find_match_prev(haystack, haystack_len, mark_find_next_cre_matchfn, cre, unused);
+static char* mark_find_prev_cre_matchfn(char* haystack, size_t haystack_len, size_t max_offset, void* cre, void* unused, size_t* ret_needle_len) {
+    return mark_find_match_prev(haystack, haystack_len, max_offset, mark_find_next_cre_matchfn, cre, unused);
 }

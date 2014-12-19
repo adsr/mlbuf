@@ -6,7 +6,10 @@
 #define MAIN(str, body) \
 int main(int argc, char **argv) { \
     buffer_t* buf; \
+    mark_t* cur; \
     buf = buffer_new(); \
+    cur = buffer_add_mark(buf, NULL, 0); \
+    if (cur) { } \
     buffer_insert(buf, 0, (char*)str, (size_t)strlen(str), NULL); \
     body \
     buffer_destroy(buf); \

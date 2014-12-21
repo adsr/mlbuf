@@ -9,6 +9,7 @@ for line-based text editors.
 * undo/redo (linear)
 * syntax highlighting (real-time; pcre-based)
 * marks (positional cursors)
+* forward and reverse regexing
 
 ### Requirements
 

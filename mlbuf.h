@@ -10,19 +10,10 @@
 typedef struct buffer_s buffer_t; // A buffer of text (stored as a linked list of blines)
 typedef struct bline_s bline_t; // A line in a buffer
 typedef struct baction_s baction_t; // An insert or delete action (used for undo)
-typedef struct bevent_s bevent_t; // A buffer event passed to all blisteners
-typedef struct blistener_s blistener_t; // A listener of bevents
 typedef struct mark_s mark_t; // A mark in a buffer
 typedef struct srule_s srule_t; // A style rule
 typedef struct srule_node_s srule_node_t; // A node in a list of style rules
 typedef struct sblock_s sblock_t; // A style of a particular character
-
-// bevent_t
-struct bevent_s {
-    int type; // MLBUF_BEVENT_TYPE_*
-    baction_t* baction;
-    bline_t* bline;
-};
 
 // buffer_t
 struct buffer_s {
@@ -33,18 +24,14 @@ struct buffer_s {
     size_t line_count;
     srule_node_t* single_srules;
     srule_node_t* multi_srules;
-    blistener_t* listeners;
     baction_t* actions;
     baction_t* action_tail;
     baction_t* action_undone;
     char *data;
     size_t data_len;
     int is_data_dirty;
-    int _is_in_event_cb;
     char _mark_counter;
     int _is_in_undo;
-    blistener_t* _listener_tmp;
-    bevent_t _event_tmp;
 };
 
 // bline_t
@@ -84,19 +71,6 @@ struct baction_s {
     size_t data_len;
     baction_t* next;
     baction_t* prev;
-};
-
-// blistener_t
-typedef void (*blistener_callback_t) (
-    void* listener,
-    buffer_t* buffer,
-    bevent_t bevent
-);
-struct blistener_s {
-    void* listener;
-    blistener_callback_t callback;
-    blistener_t* next;
-    blistener_t* prev;
 };
 
 // mark_t
@@ -147,7 +121,6 @@ int buffer_undo(buffer_t* self);
 int buffer_redo(buffer_t* self);
 int buffer_add_srule(buffer_t* self, srule_t* srule);
 int buffer_remove_srule(buffer_t* self, srule_t* srule);
-int buffer_add_listener(buffer_t* self, blistener_t blistener);
 int buffer_debug_dump(buffer_t* self, FILE* stream);
 int buffer_destroy(buffer_t* self);
 
@@ -155,10 +128,6 @@ int buffer_destroy(buffer_t* self);
 int bline_insert(bline_t* self, size_t col, char* data, size_t data_len, size_t* ret_num_chars);
 int bline_delete(bline_t* self, size_t col, size_t num_chars);
 int bline_get_col(bline_t* self, size_t index, size_t* ret_col);
-
-// blistener functions
-blistener_t* blistener_new(void* listener, blistener_callback_t cb);
-int blistener_destroy(blistener_t* self);
 
 // mark functions
 mark_t* mark_clone(mark_t* self);
@@ -213,26 +182,6 @@ int utf8_unicode_to_char(char *out, uint32_t c);
 
 #define MLBUF_BACTION_TYPE_INSERT 0
 #define MLBUF_BACTION_TYPE_DELETE 1
-
-#define MLBUF_BEVENT_TYPE_BACTION 0
-#define MLBUF_BEVENT_TYPE_BLINE_CTOR 1
-#define MLBUF_BEVENT_TYPE_BLINE_DTOR 2
-#define MLBUF_BEVENT_TYPE_BLINE_UPDATE 3
-#define MLBUF_BEVENT_RAISE(p_buffer, p_type, p_bevent) do { \
-    if ((p_buffer)->_is_in_event_cb != 0) break; \
-    memset(&((p_buffer)->_event_tmp), 0, sizeof(bevent_t)); \
-    (p_buffer)->_event_tmp = (struct bevent_t){(p_bevent)}; \
-    (p_buffer)->_event_tmp.type = (p_type); \
-    (p_buffer)->_is_in_event_cb = 1; \
-    DL_FOREACH((p_buffer)->blisteners, (p_buffer)->_listener_tmp) { \
-        ((p_buffer)->_listener_tmp->callback)( \
-            (p_buffer)->_listener_tmp->listener, \
-            (p_buffer), \
-            (p_buffer)->_event_tmp \
-        ); \
-    } \
-    (p_buffer)->_is_in_event_cb = 0; \
-} while(0)
 
 #define MLBUF_SRULE_TYPE_SINGLE 0
 #define MLBUF_SRULE_TYPE_MULTI 1

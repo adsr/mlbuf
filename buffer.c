@@ -372,7 +372,6 @@ int buffer_debug_dump(buffer_t* self, FILE* stream) {
     size_t j;
     bline_t* bline_tmp;
     srule_node_t* srule_tmp;
-    blistener_t* listener_tmp;
     baction_t* action_tmp;
     mark_t* mark_tmp;
     char* mark_str;
@@ -452,21 +451,6 @@ int buffer_debug_dump(buffer_t* self, FILE* stream) {
         fprintf(stream, "    range_b=%c\n", srule_tmp->srule->range_b ? srule_tmp->srule->range_b->letter : ' ');
         fprintf(stream, "    style=%d,%d\n", srule_tmp->srule->style.fg, srule_tmp->srule->style.bg);
         i++;
-    }
-    i = 0; DL_FOREACH(self->listeners, listener_tmp) { i++; }
-    fprintf(stream, "listeners=%d\n", i);
-    fprintf(stream, "actions:\n");
-    i = 0; DL_FOREACH(self->actions, action_tmp) {
-        fprintf(stream, "  %d\n", i);
-        fprintf(stream, "    type=%d\n", action_tmp->type);
-        fprintf(stream, "    start_line_index=%lu\n", action_tmp->start_line_index);
-        fprintf(stream, "    start_col=%lu\n", action_tmp->start_col);
-        fprintf(stream, "    maybe_end_line_index=%lu\n", action_tmp->maybe_end_line_index);
-        fprintf(stream, "    maybe_end_col=%lu\n", action_tmp->maybe_end_col);
-        fprintf(stream, "    byte_delta=%ld\n", action_tmp->byte_delta);
-        fprintf(stream, "    char_delta=%ld\n", action_tmp->char_delta);
-        fprintf(stream, "    data=%.*s\n", (int)action_tmp->data_len, action_tmp->data);
-        fprintf(stream, "    line_delta=%ld\n", action_tmp->line_delta);
     }
     fprintf(stream, "action_tail=%c\n", self->action_tail ? 'y' : 'n');
     fprintf(stream, "action_undone=%c\n", self->action_undone ? 'y' : 'n');
@@ -611,8 +595,6 @@ int buffer_redo(buffer_t* self) {
     }
     return rc;
 }
-
-int buffer_add_listener(buffer_t* self, blistener_t blistener); // TODO
 
 static int _buffer_baction_do(buffer_t* self, bline_t* bline, baction_t* action, int is_redo, size_t* opt_repeat_offset) {
     int rc;

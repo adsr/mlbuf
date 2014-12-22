@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <termbox.h>
-#include "../mledit.h"
+#include "../mlbuf.h"
 #include "assert.h"
 
 buffer_t* buf;

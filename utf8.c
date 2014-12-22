@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 
-#include "mledit.h"
+#include "mlbuf.h"
 
 static const unsigned char utf8_length[256] = {
   1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,

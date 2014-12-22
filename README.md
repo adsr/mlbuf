@@ -1,7 +1,7 @@
-mledit
+mlbuf
 ======
 
-mledit stands for multiline edit. It's a library that provides functionality
+mlbuf stands for multiline edit. It's a library that provides functionality
 for line-based text editors.
 
 ### Features

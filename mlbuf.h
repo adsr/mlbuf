@@ -1,5 +1,5 @@
-#ifndef __MLEDIT_H
-#define __MLEDIT_H
+#ifndef __MLBUF_H
+#define __MLBUF_H
 
 #include <stdio.h>
 #include <stdint.h>
@@ -19,7 +19,7 @@ typedef struct sblock_s sblock_t; // A style of a particular character
 
 // bevent_t
 struct bevent_s {
-    int type; // MLEDIT_BEVENT_TYPE_*
+    int type; // MLBUF_BEVENT_TYPE_*
     baction_t* baction;
     bline_t* bline;
 };
@@ -69,7 +69,7 @@ struct bline_s {
 
 // baction_t
 struct baction_s {
-    int type; // MLEDIT_BACTION_TYPE_*
+    int type; // MLBUF_BACTION_TYPE_*
     buffer_t* buffer;
     bline_t* start_line;
     size_t start_line_index;
@@ -117,7 +117,7 @@ struct sblock_s {
 
 // srule_t
 struct srule_s {
-    int type; // MLEDIT_SRULE_TYPE_*
+    int type; // MLBUF_SRULE_TYPE_*
     char* re;
     char* re_end;
     pcre* cre;
@@ -206,19 +206,19 @@ int utf8_char_to_unicode(uint32_t *out, const char *c);
 int utf8_unicode_to_char(char *out, uint32_t c);
 
 // Macros
-#define MLEDIT_DEBUG 1
+#define MLBUF_DEBUG 1
 
-#define MLEDIT_OK 0
-#define MLEDIT_ERR 1
+#define MLBUF_OK 0
+#define MLBUF_ERR 1
 
-#define MLEDIT_BACTION_TYPE_INSERT 0
-#define MLEDIT_BACTION_TYPE_DELETE 1
+#define MLBUF_BACTION_TYPE_INSERT 0
+#define MLBUF_BACTION_TYPE_DELETE 1
 
-#define MLEDIT_BEVENT_TYPE_BACTION 0
-#define MLEDIT_BEVENT_TYPE_BLINE_CTOR 1
-#define MLEDIT_BEVENT_TYPE_BLINE_DTOR 2
-#define MLEDIT_BEVENT_TYPE_BLINE_UPDATE 3
-#define MLEDIT_BEVENT_RAISE(p_buffer, p_type, p_bevent) do { \
+#define MLBUF_BEVENT_TYPE_BACTION 0
+#define MLBUF_BEVENT_TYPE_BLINE_CTOR 1
+#define MLBUF_BEVENT_TYPE_BLINE_DTOR 2
+#define MLBUF_BEVENT_TYPE_BLINE_UPDATE 3
+#define MLBUF_BEVENT_RAISE(p_buffer, p_type, p_bevent) do { \
     if ((p_buffer)->_is_in_event_cb != 0) break; \
     memset(&((p_buffer)->_event_tmp), 0, sizeof(bevent_t)); \
     (p_buffer)->_event_tmp = (struct bevent_t){(p_bevent)}; \
@@ -234,29 +234,29 @@ int utf8_unicode_to_char(char *out, uint32_t c);
     (p_buffer)->_is_in_event_cb = 0; \
 } while(0)
 
-#define MLEDIT_SRULE_TYPE_SINGLE 0
-#define MLEDIT_SRULE_TYPE_MULTI 1
-#define MLEDIT_SRULE_TYPE_RANGE 2
+#define MLBUF_SRULE_TYPE_SINGLE 0
+#define MLBUF_SRULE_TYPE_MULTI 1
+#define MLBUF_SRULE_TYPE_RANGE 2
 
-#define MLEDIT_MIN(a,b) (((a)<(b)) ? (a) : (b))
-#define MLEDIT_MAX(a,b) (((a)>(b)) ? (a) : (b))
+#define MLBUF_MIN(a,b) (((a)<(b)) ? (a) : (b))
+#define MLBUF_MAX(a,b) (((a)>(b)) ? (a) : (b))
 
-#define MLEDIT_BLINE_DATA_STOP(bline) ((bline)->data + ((bline)->data_len))
+#define MLBUF_BLINE_DATA_STOP(bline) ((bline)->data + ((bline)->data_len))
 
-#define MLEDIT_MARK_MOVE(pmark, ptarget, pcol, psettarg) do { \
+#define MLBUF_MARK_MOVE(pmark, ptarget, pcol, psettarg) do { \
     DL_DELETE((pmark)->bline->marks, (pmark)); \
     (pmark)->bline = (ptarget); \
-    MLEDIT_MARK_SET_COL((pmark), (pcol), (psettarg)); \
+    MLBUF_MARK_SET_COL((pmark), (pcol), (psettarg)); \
     DL_APPEND((ptarget)->marks, (pmark)); \
 } while(0);
 
-#define MLEDIT_MARK_SET_COL(pmark, pcol, psettarg) do { \
-    (pmark)->col = MLEDIT_MIN((pmark)->bline->char_count, MLEDIT_MAX(0, (pcol))); \
+#define MLBUF_MARK_SET_COL(pmark, pcol, psettarg) do { \
+    (pmark)->col = MLBUF_MIN((pmark)->bline->char_count, MLBUF_MAX(0, (pcol))); \
     if (psettarg) (pmark)->target_col = (pmark)->col; \
 } while(0);
 
-#define MLEDIT_DEBUG_PRINTF(fmt, ...) do { \
-    if (MLEDIT_DEBUG) { \
+#define MLBUF_DEBUG_PRINTF(fmt, ...) do { \
+    if (MLBUF_DEBUG) { \
         fprintf(stderr, "%lu [%s] ", time(0), __PRETTY_FUNCTION__); \
         fprintf(stderr, (fmt), __VA_ARGS__); \
         fflush(stderr); \

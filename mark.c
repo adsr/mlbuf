@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <pcre.h>
-#include "mledit.h"
+#include "mlbuf.h"
 
 typedef char* (*mark_find_match_fn)(char* haystack, size_t haystack_len, size_t max_offset, void* u1, void* u2, size_t* ret_match_len);
 static int mark_find_match(mark_t* self, mark_find_match_fn matchfn, void* u1, void* u2, int reverse, bline_t** ret_line, size_t* ret_col);
@@ -24,7 +24,7 @@ mark_t* mark_clone(mark_t* self) {
 int mark_insert_before(mark_t* self, char* data, size_t data_len) {
     int rc;
     size_t num_chars;
-    if ((rc = bline_insert(self->bline, self->col, data, data_len, &num_chars)) == MLEDIT_OK) {
+    if ((rc = bline_insert(self->bline, self->col, data, data_len, &num_chars)) == MLBUF_OK) {
         rc = mark_move_by(self, ((ssize_t)num_chars) * -1);
     }
     return rc;
@@ -43,7 +43,7 @@ int mark_delete_after(mark_t* self, size_t num_chars) {
 // Delete data before mark
 int mark_delete_before(mark_t* self, size_t num_chars) {
     int rc;
-    if ((rc = mark_move_by(self, -1 * (ssize_t)num_chars)) == MLEDIT_OK) {
+    if ((rc = mark_move_by(self, -1 * (ssize_t)num_chars)) == MLBUF_OK) {
         rc = mark_delete_after(self, num_chars);
     }
     return rc;
@@ -55,8 +55,8 @@ int mark_move_by(mark_t* self, ssize_t char_delta) {
     buffer_get_offset(self->bline->buffer, self->bline, self->col, &offset);
     return mark_move_offset(
         self,
-        (size_t)MLEDIT_MIN(self->bline->buffer->char_count,
-            MLEDIT_MAX(0, (ssize_t)offset + char_delta)
+        (size_t)MLBUF_MIN(self->bline->buffer->char_count,
+            MLBUF_MAX(0, (ssize_t)offset + char_delta)
         )
     );
 }
@@ -80,40 +80,40 @@ int mark_move_vert(mark_t* self, ssize_t line_delta) {
         line_delta = line_delta + (line_delta > 0 ? -1 : 1);
     }
     if (cur_line == self->bline) {
-        return MLEDIT_OK;
+        return MLBUF_OK;
     }
-    MLEDIT_MARK_MOVE(self, cur_line, self->target_col, 0);
-    return MLEDIT_OK;
+    MLBUF_MARK_MOVE(self, cur_line, self->target_col, 0);
+    return MLBUF_OK;
 }
 
 // Move mark to beginning of line
 int mark_move_bol(mark_t* self) {
-    MLEDIT_MARK_SET_COL(self, 0, 1);
-    return MLEDIT_OK;
+    MLBUF_MARK_SET_COL(self, 0, 1);
+    return MLBUF_OK;
 }
 
 // Move mark to end of line
 int mark_move_eol(mark_t* self) {
-    MLEDIT_MARK_SET_COL(self, self->bline->char_count, 1);
-    return MLEDIT_OK;
+    MLBUF_MARK_SET_COL(self, self->bline->char_count, 1);
+    return MLBUF_OK;
 }
 
 // Move mark to a column on the current line
 int mark_move_col(mark_t* self, size_t col) {
-    MLEDIT_MARK_SET_COL(self, col, 1);
-    return MLEDIT_OK;
+    MLBUF_MARK_SET_COL(self, col, 1);
+    return MLBUF_OK;
 }
 
 // Move mark to beginning of buffer
 int mark_move_beginning(mark_t* self) {
-    MLEDIT_MARK_MOVE(self, self->bline->buffer->first_line, 0, 1);
-    return MLEDIT_OK;
+    MLBUF_MARK_MOVE(self, self->bline->buffer->first_line, 0, 1);
+    return MLBUF_OK;
 }
 
 // Move mark to end of buffer
 int mark_move_end(mark_t* self) {
-    MLEDIT_MARK_MOVE(self, self->bline->buffer->last_line, self->bline->buffer->last_line->char_count, 1);
-    return MLEDIT_OK;
+    MLBUF_MARK_MOVE(self, self->bline->buffer->last_line, self->bline->buffer->last_line->char_count, 1);
+    return MLBUF_OK;
 }
 
 // Move mark to a particular offset
@@ -121,8 +121,8 @@ int mark_move_offset(mark_t* self, size_t offset) {
     bline_t* dest_line;
     size_t dest_col;
     buffer_get_bline_col(self->bline->buffer, offset, &dest_line, &dest_col);
-    MLEDIT_MARK_MOVE(self, dest_line, dest_col, 1);
-    return MLEDIT_OK;
+    MLBUF_MARK_MOVE(self, dest_line, dest_col, 1);
+    return MLBUF_OK;
 }
 
 // Find next occurrence of string from mark
@@ -185,7 +185,7 @@ int mark_find_bracket_pair(mark_t* self, size_t max_chars, bline_t** ret_line, s
     };
     // If we're at eol, there's nothing to match
     if (self->col >= self->bline->char_count) {
-        return MLEDIT_ERR;
+        return MLBUF_ERR;
     }
     // Set brkt to char under mark
     brkt = *(self->bline->data + self->bline->char_indexes[self->col]);
@@ -205,7 +205,7 @@ int mark_find_bracket_pair(mark_t* self, size_t max_chars, bline_t** ret_line, s
     }
     // If targ is not set, brkt was not a bracket char
     if (!targ) {
-        return MLEDIT_ERR;
+        return MLBUF_ERR;
     }
     // Now look for targ, keeping track of nesting
     // Break if we look at more than max_chars
@@ -221,7 +221,7 @@ int mark_find_bracket_pair(mark_t* self, size_t max_chars, bline_t** ret_line, s
                     // Match!
                     *ret_line = cur_line;
                     *ret_col = col;
-                    return MLEDIT_OK;
+                    return MLBUF_OK;
                 } else {
                     nest -= 1;
                 }
@@ -230,7 +230,7 @@ int mark_find_bracket_pair(mark_t* self, size_t max_chars, bline_t** ret_line, s
             }
             nchars += 1;
             if (nchars >= max_chars) {
-                return MLEDIT_ERR;
+                return MLBUF_ERR;
             }
         }
         if (dir > 0) {
@@ -238,11 +238,11 @@ int mark_find_bracket_pair(mark_t* self, size_t max_chars, bline_t** ret_line, s
             if (cur_line) col = 0;
         } else {
             cur_line = cur_line->prev;
-            if (cur_line) col = MLEDIT_MAX(1, cur_line->char_count) - 1;
+            if (cur_line) col = MLBUF_MAX(1, cur_line->char_count) - 1;
         }
     }
     // If we got here, targ was not found, or nesting was off
-    return MLEDIT_ERR;
+    return MLBUF_ERR;
 }
 
 // Delete data between self and other
@@ -252,7 +252,7 @@ int mark_delete_between_mark(mark_t* self, mark_t* other) {
     buffer_get_offset(self->bline->buffer, self->bline, self->col, &offset_a);
     buffer_get_offset(other->bline->buffer, other->bline, other->col, &offset_b);
     if (offset_a == offset_b) {
-        return MLEDIT_OK;
+        return MLBUF_OK;
     } else if (offset_a > offset_b) {
         return buffer_delete(self->bline->buffer, offset_b, offset_a - offset_b);
     }
@@ -279,7 +279,7 @@ int mark_get_between_mark(mark_t* self, mark_t* other, char** ret_str, size_t* r
     }
     *ret_str = strdup("");
     *ret_str_len = 0;
-    return MLEDIT_OK;
+    return MLBUF_OK;
 }
 
 // Swap positions of self and other
@@ -292,51 +292,51 @@ int mark_swap_with_mark(mark_t* self, mark_t* other) {
     other->col = self->col;
     self->bline = tmp_bline;
     self->col = tmp_col;
-    return MLEDIT_OK;
+    return MLBUF_OK;
 }
 
 // Free a mark
 int mark_destroy(mark_t* self) {
     free(self);
-    return MLEDIT_OK;
+    return MLBUF_OK;
 }
 
-#define MLEDIT_MARK_IMPLEMENT_MOVE_VIA_FIND(mark, findfn, ...) \
+#define MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND(mark, findfn, ...) \
     int rc; \
     bline_t* line; \
     size_t col; \
-    if ((rc = (findfn)((mark), __VA_ARGS__, &line, &col)) == MLEDIT_OK) { \
-        MLEDIT_MARK_MOVE((mark), line, col, 1); \
-        return MLEDIT_OK; \
+    if ((rc = (findfn)((mark), __VA_ARGS__, &line, &col)) == MLBUF_OK) { \
+        MLBUF_MARK_MOVE((mark), line, col, 1); \
+        return MLBUF_OK; \
     } \
     return rc;
 
 int mark_move_next_str(mark_t* self, char* str, size_t str_len) {
-    MLEDIT_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_next_str, str, str_len)
+    MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_next_str, str, str_len)
 }
 
 int mark_move_prev_str(mark_t* self, char* str, size_t str_len) {
-    MLEDIT_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_prev_str, str, str_len)
+    MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_prev_str, str, str_len)
 }
 
 int mark_move_next_cre(mark_t* self, pcre* cre) {
-    MLEDIT_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_next_cre, cre)
+    MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_next_cre, cre)
 }
 
 int mark_move_prev_cre(mark_t* self, pcre* cre) {
-    MLEDIT_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_prev_cre, cre)
+    MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_prev_cre, cre)
 }
 
 int mark_move_next_re(mark_t* self, char* re, size_t re_len) {
-    MLEDIT_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_next_re, re, re_len)
+    MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_next_re, re, re_len)
 }
 
 int mark_move_prev_re(mark_t* self, char* re, size_t re_len) {
-    MLEDIT_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_prev_re, re, re_len)
+    MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_prev_re, re, re_len)
 }
 
 int mark_move_bracket_pair(mark_t* self, size_t max_chars) {
-    MLEDIT_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_bracket_pair, max_chars);
+    MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_bracket_pair, max_chars);
 }
 
 // Find first occurrence of match according to matchfn. Search backwards if
@@ -365,7 +365,7 @@ static int mark_find_match(mark_t* self, mark_find_match_fn matchfn, void* u1, v
                 bline_get_col(search_line, (size_t)(match - search_line->data), &match_col);
                 *ret_line = search_line;
                 *ret_col = match_col;
-                return MLEDIT_OK;
+                return MLBUF_OK;
             }
         }
         search_line = reverse ? search_line->prev : search_line->next;
@@ -375,7 +375,7 @@ static int mark_find_match(mark_t* self, mark_find_match_fn matchfn, void* u1, v
         }
     }
     *ret_line = NULL;
-    return MLEDIT_ERR;
+    return MLBUF_ERR;
 }
 
 // Return the last occurrence of a match given a forward-searching matchfn
@@ -422,7 +422,7 @@ static int mark_find_re(mark_t* self, char* re, size_t re_len, int reverse, blin
     if (cre == NULL) {
         // TODO log error
         free(regex);
-        return MLEDIT_ERR;
+        return MLBUF_ERR;
     }
     if (reverse) {
         rc = mark_find_prev_cre(self, cre, ret_line, ret_col);

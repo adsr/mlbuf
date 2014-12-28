@@ -160,7 +160,9 @@ int mark_move_bracket_pair(mark_t* self, size_t max_chars);
 int mark_get_offset(mark_t* self, size_t* ret_offset);
 int mark_delete_between_mark(mark_t* self, mark_t* other);
 int mark_get_between_mark(mark_t* self, mark_t* other, char** ret_str, size_t* ret_str_len);
+int mark_is_lt(mark_t* self, mark_t* other);
 int mark_is_gt(mark_t* self, mark_t* other);
+int mark_is_eq(mark_t* self, mark_t* other);
 int mark_swap_with_mark(mark_t* self, mark_t* other);
 
 // srule functions

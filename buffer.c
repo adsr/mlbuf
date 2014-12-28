@@ -372,7 +372,6 @@ int buffer_debug_dump(buffer_t* self, FILE* stream) {
     size_t j;
     bline_t* bline_tmp;
     srule_node_t* srule_tmp;
-    baction_t* action_tmp;
     mark_t* mark_tmp;
     char* mark_str;
     size_t mark_str_len;

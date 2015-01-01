@@ -1,7 +1,6 @@
 #include "test.h"
 
 MAIN("hello\nworld",
-    // TODO
     mark_move_beginning(cur);
 
     mark_move_by(cur, 1);

@@ -49,6 +49,14 @@ int mark_delete_before(mark_t* self, size_t num_chars) {
     return rc;
 }
 
+// Move mark to line_index:col
+int mark_move_to(mark_t* self, size_t line_index, size_t col) {
+    bline_t* bline;
+    buffer_get_bline(self->bline->buffer, line_index, &bline);
+    MLBUF_MARK_MOVE(self, bline, col, 1);
+    return MLBUF_OK;
+}
+
 // Move mark by a character delta
 int mark_move_by(mark_t* self, ssize_t char_delta) {
     size_t offset;

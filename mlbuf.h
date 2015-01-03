@@ -27,6 +27,8 @@ struct buffer_s {
     baction_t* actions;
     baction_t* action_tail;
     baction_t* action_undone;
+    char* path;
+    int is_unsaved;
     char *data;
     size_t data_len;
     int is_data_dirty;
@@ -109,6 +111,9 @@ struct srule_node_s {
 // buffer functions
 buffer_t* buffer_new();
 mark_t* buffer_add_mark(buffer_t* self, bline_t* maybe_line, size_t maybe_col);
+int buffer_open(buffer_t* self, char* path, size_t path_len);
+int buffer_save(buffer_t* self);
+int buffer_save_as(buffer_t* self, char* path, size_t path_len);
 int buffer_get(buffer_t* self, char** ret_data, size_t* ret_data_len);
 int buffer_set(buffer_t* self, char* data, size_t data_len);
 int buffer_substr(buffer_t* self, bline_t* start_line, size_t start_col, bline_t* end_line, size_t end_col, char** ret_data, size_t* ret_data_len, size_t* ret_nchars);

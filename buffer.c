@@ -2,6 +2,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <sys/mman.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <fcntl.h>
 #include "mlbuf.h"
 #include "utlist.h"
 
@@ -38,6 +43,103 @@ buffer_t* buffer_new() {
     return buffer;
 }
 
+// Wrapper for buffer_new + buffer_open
+buffer_t* buffer_new_file(char* path, size_t path_len) {
+    buffer_t* self;
+    int rc;
+    self = buffer_new();
+    if ((rc = buffer_open(self, path, path_len)) != MLBUF_OK) {
+        buffer_destroy(self);
+        return NULL;
+    }
+    return self;
+}
+
+// Read buffer from path
+int buffer_open(buffer_t* self, char* opath, size_t opath_len) {
+    char* path;
+    int rc;
+    int fd;
+    struct stat st;
+    char* buffer;
+
+    // Open file for reading
+    path = strndup(opath, opath_len);
+    if ((fd = open(self->path, O_RDONLY)) < 0) {
+        free(path);
+        return MLBUF_ERR;
+    }
+
+    // Get size
+    if (fstat(fd, &st) < 0) {
+        free(path);
+        return MLBUF_ERR;
+    }
+
+    // Memory map file
+    buffer = mmap(0, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (buffer == MAP_FAILED) {
+        free(path);
+        return MLBUF_ERR;
+    }
+
+    // Fill buffer
+    if ((rc = buffer_set(self, buffer, st.st_size)) == MLBUF_OK) {
+        if (self->path) free(self->path);
+        self->path = path;
+        self->is_unsaved = 0;
+    } else {
+        free(path);
+    }
+
+    // Unmap and close file
+    munmap(buffer, st.st_size);
+    close(fd);
+    return rc;
+}
+
+// Write buffer to path
+int buffer_save(buffer_t* self) {
+    return buffer_save_as(self, self->path, self->path ? strlen(self->path) : 0);
+}
+
+// Write buffer to specified path
+int buffer_save_as(buffer_t* self, char* opath, size_t opath_len) {
+    char* path;
+    FILE* fp;
+    char *data;
+    size_t data_len;
+
+    // Exit early if path is empty
+    if (!opath || opath_len < 1) {
+        return MLBUF_ERR;
+    }
+
+    // Open file for writing
+    path = strndup(opath, opath_len);
+    if (!(fp = fopen(path, "wb"))) {
+        free(path);
+        return MLBUF_ERR;
+    }
+
+    // Write data
+    buffer_get(self, &data, &data_len);
+    if (fwrite(data, sizeof(char), data_len, fp) != data_len) {
+        fclose(fp);
+        free(path);
+        return MLBUF_ERR;
+    }
+
+    // Set path
+    if (self->path) free(self->path);
+    self->path = path;
+    self->is_unsaved = 0;
+
+    // Close file
+    fclose(fp);
+    return MLBUF_OK;
+}
+
 // Free a buffer
 int buffer_destroy(buffer_t* self) {
     bline_t* line;
@@ -50,6 +152,7 @@ int buffer_destroy(buffer_t* self) {
         line = line_tmp;
     }
     if (self->data) free(self->data);
+    if (self->path) free(self->path);
     DL_FOREACH_SAFE(self->actions, action, action_tmp) {
         DL_DELETE(self->actions, action);
         _baction_destroy(action);
@@ -623,6 +726,9 @@ static int _buffer_update(buffer_t* self, baction_t* action) {
     self->char_count += action->char_delta;
     self->line_count += action->line_delta;
     self->is_data_dirty = 1;
+
+    // Set unsaved
+    self->is_unsaved = 1;
 
     // Renumber lines
     last_line = NULL;

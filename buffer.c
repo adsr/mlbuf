@@ -44,7 +44,7 @@ buffer_t* buffer_new() {
 }
 
 // Wrapper for buffer_new + buffer_open
-buffer_t* buffer_new_file(char* path, size_t path_len) {
+buffer_t* buffer_new_open(char* path, size_t path_len) {
     buffer_t* self;
     int rc;
     self = buffer_new();

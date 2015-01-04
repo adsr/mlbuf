@@ -32,6 +32,7 @@ struct buffer_s {
     char *data;
     size_t data_len;
     int is_data_dirty;
+    int ref_count;
     char _mark_counter;
     int _is_in_undo;
 };
@@ -110,6 +111,7 @@ struct srule_node_s {
 
 // buffer functions
 buffer_t* buffer_new();
+buffer_t* buffer_new_open(char* path, size_t path_len);
 mark_t* buffer_add_mark(buffer_t* self, bline_t* maybe_line, size_t maybe_col);
 int buffer_open(buffer_t* self, char* path, size_t path_len);
 int buffer_save(buffer_t* self);

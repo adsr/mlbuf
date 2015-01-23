@@ -7,5 +7,5 @@ MAIN("hello\nworld",
     mark_insert_after(cur, "s", 1);
     buffer_get(buf, &data, &data_len);
     ASSERT("insa", 0, strncmp("shello\nworld", data, data_len));
-    ASSERT("col", 1, cur->col);
+    ASSERT("col", 0, cur->col);
 )

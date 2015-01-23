@@ -22,17 +22,17 @@ mark_t* mark_clone(mark_t* self) {
 
 // Insert data before mark
 int mark_insert_before(mark_t* self, char* data, size_t data_len) {
+    return bline_insert(self->bline, self->col, data, data_len, NULL);
+}
+
+// Insert data after mark
+int mark_insert_after(mark_t* self, char* data, size_t data_len) {
     int rc;
     size_t num_chars;
     if ((rc = bline_insert(self->bline, self->col, data, data_len, &num_chars)) == MLBUF_OK) {
         rc = mark_move_by(self, ((ssize_t)num_chars) * -1);
     }
     return rc;
-}
-
-// Insert data after mark
-int mark_insert_after(mark_t* self, char* data, size_t data_len) {
-    return bline_insert(self->bline, self->col, data, data_len, NULL);
 }
 
 // Delete data after mark

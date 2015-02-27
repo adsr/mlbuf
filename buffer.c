@@ -284,6 +284,7 @@ int buffer_insert(buffer_t* self, size_t offset, char* data, size_t data_len, si
     action->start_line_index = start_line->line_index;
     action->start_col = start_col;
     action->maybe_end_line = cur_line;
+    action->maybe_end_line_index = action->start_line_index + num_lines_added;
     action->maybe_end_col = cur_col;
     action->byte_delta = (ssize_t)ins_data_len;
     action->char_delta = (ssize_t)ins_data_nchars;
@@ -469,6 +470,12 @@ int buffer_remove_srule(buffer_t* self, srule_t* srule) {
     }
     if (!found) return MLBUF_ERR;
     return _buffer_apply_styles(self->first_line, self->line_count - 1);
+}
+
+// Set callback to cb. Pass in NULL to unset callback.
+int buffer_set_callback(buffer_t* self, buffer_callback_t cb) {
+    self->callback = cb;
+    return MLBUF_OK;
 }
 
 // Print buffer debug info to stream
@@ -751,7 +758,12 @@ static int _buffer_update(buffer_t* self, baction_t* action) {
         _buffer_add_to_undo_stack(self, action);
     }
 
-    // TODO raise events
+    // Raise event on listener
+    if (self->callback && !self->is_in_callback) {
+        self->is_in_callback = 1;
+        self->callback(self, action);
+        self->is_in_callback = 0;
+    }
 
     return MLBUF_OK;
 }

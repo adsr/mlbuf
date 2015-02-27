@@ -14,6 +14,7 @@ typedef struct mark_s mark_t; // A mark in a buffer
 typedef struct srule_s srule_t; // A style rule
 typedef struct srule_node_s srule_node_t; // A node in a list of style rules
 typedef struct sblock_s sblock_t; // A style of a particular character
+typedef void (*buffer_callback_t)(buffer_t* buffer, baction_t* action);
 
 // buffer_t
 struct buffer_s {
@@ -33,6 +34,8 @@ struct buffer_s {
     size_t data_len;
     int is_data_dirty;
     int ref_count;
+    buffer_callback_t callback;
+    int is_in_callback;
     char _mark_counter;
     int _is_in_undo;
 };
@@ -128,6 +131,7 @@ int buffer_undo(buffer_t* self);
 int buffer_redo(buffer_t* self);
 int buffer_add_srule(buffer_t* self, srule_t* srule);
 int buffer_remove_srule(buffer_t* self, srule_t* srule);
+int buffer_set_callback(buffer_t* self, buffer_callback_t cb);
 int buffer_debug_dump(buffer_t* self, FILE* stream);
 int buffer_destroy(buffer_t* self);
 

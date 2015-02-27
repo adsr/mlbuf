@@ -473,8 +473,14 @@ int buffer_remove_srule(buffer_t* self, srule_t* srule) {
 }
 
 // Set callback to cb. Pass in NULL to unset callback.
-int buffer_set_callback(buffer_t* self, buffer_callback_t cb) {
-    self->callback = cb;
+int buffer_set_callback(buffer_t* self, buffer_callback_t cb, void* udata) {
+    if (cb) {
+        self->callback = cb;
+        self->callback_udata = udata;
+    } else {
+        self->callback = NULL;
+        self->callback_udata = NULL;
+    }
     return MLBUF_OK;
 }
 
@@ -761,7 +767,7 @@ static int _buffer_update(buffer_t* self, baction_t* action) {
     // Raise event on listener
     if (self->callback && !self->is_in_callback) {
         self->is_in_callback = 1;
-        self->callback(self, action);
+        self->callback(self, action, self->callback_udata);
         self->is_in_callback = 0;
     }
 

@@ -1,9 +1,11 @@
 #include "test.h"
 
 buffer_t* global_buf;
+int* global_udata;
 
-static void callback_fn(buffer_t* buf, baction_t* bac) {
+static void callback_fn(buffer_t* buf, baction_t* bac, void* udata) {
     ASSERT("bufp", global_buf, buf);
+    ASSERT("udata", (void*)global_udata, udata);
     ASSERT("bac_type", MLBUF_BACTION_TYPE_INSERT, bac->type);
     ASSERT("bac_buf", buf, bac->buffer);
     ASSERT("bac_start_line", buf->first_line, bac->start_line);
@@ -19,7 +21,10 @@ static void callback_fn(buffer_t* buf, baction_t* bac) {
 }
 
 MAIN("hello\nworld",
+    int udata;
+    udata = 42;
     global_buf = buf;
-    buffer_set_callback(buf, callback_fn);
+    global_udata = &udata;
+    buffer_set_callback(buf, callback_fn, (void*)global_udata);
     buffer_insert(buf, 0, "te\nst", 5, NULL);
 )

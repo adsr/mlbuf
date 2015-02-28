@@ -67,7 +67,7 @@ int buffer_open(buffer_t* self, char* opath, size_t opath_len) {
 
     // Open file for reading
     path = strndup(opath, opath_len);
-    if ((fd = open(self->path, O_RDONLY)) < 0) {
+    if ((fd = open(path, O_RDONLY)) < 0) {
         free(path);
         return MLBUF_ERR;
     }

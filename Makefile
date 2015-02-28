@@ -3,7 +3,7 @@ CC="colorgcc"
 all: libmlbuf.so
 
 buffer.o: *.c
-	$(CC) -Wall -g -fPIC -lpcre -c *.c
+	$(CC) -D_GNU_SOURCE -Wall -g -fPIC -lpcre -c *.c
 
 libmlbuf.a: buffer.o
 	ar rcs libmlbuf.a *.o

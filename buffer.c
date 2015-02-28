@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <wchar.h>
 #include "mlbuf.h"
 #include "utlist.h"
 
@@ -37,6 +38,7 @@ buffer_t* buffer_new() {
     buffer_t* buffer;
     bline_t* bline;
     buffer = calloc(1, sizeof(buffer_t));
+    buffer->tab_width = 4;
     bline = _buffer_bline_new(buffer);
     buffer->first_line = bline;
     buffer->last_line = bline;
@@ -484,6 +486,19 @@ int buffer_set_callback(buffer_t* self, buffer_callback_t cb, void* udata) {
     return MLBUF_OK;
 }
 
+// Set tab_width and recalculate all line char widths
+int buffer_set_tab_width(buffer_t* self, int tab_width) {
+    bline_t* tmp_line;
+    if (tab_width < 1) {
+        return MLBUF_ERR;
+    }
+    self->tab_width = tab_width;
+    for (tmp_line = self->first_line; tmp_line; tmp_line = tmp_line->next) {
+        _buffer_bline_count_chars(tmp_line);
+    }
+    return MLBUF_OK;
+}
+
 // Print buffer debug info to stream
 int buffer_debug_dump(buffer_t* self, FILE* stream) {
     int i;
@@ -534,10 +549,10 @@ int buffer_debug_dump(buffer_t* self, FILE* stream) {
         fprintf(stream, "    next=%ld\n", bline_tmp->next ? bline_tmp->next->line_index : -1);
         fprintf(stream, "    prev=%ld\n", bline_tmp->prev ? bline_tmp->prev->line_index : -1);
         fprintf(stream, "    data_cap=%lu\n", bline_tmp->data_cap);
-        fprintf(stream, "    char_indexes=");
+        fprintf(stream, "    char_indexes+pos=");
         if (bline_tmp->char_indexes) {
             for (j = 0; j < bline_tmp->char_count; j++) {
-                fprintf(stream, "%lu ", bline_tmp->char_indexes[j]);
+                fprintf(stream, "%lu@%lu ", bline_tmp->char_indexes[j], bline_tmp->char_pos[j]);
             }
         }
         fprintf(stream, "\n    char_styles_cap=%lu\n", bline_tmp->char_styles_cap);
@@ -1012,6 +1027,7 @@ static int _buffer_bline_free(bline_t* bline, bline_t* maybe_mark_line, size_t c
     mark_t* mark;
     mark_t* mark_tmp;
     if (bline->data) free(bline->data);
+    if (bline->char_pos) free(bline->char_pos);
     if (bline->char_indexes) free(bline->char_indexes);
     if (bline->char_styles) free(bline->char_styles);
     if (bline->marks) {
@@ -1195,29 +1211,47 @@ static size_t _buffer_bline_index_to_col(bline_t* bline, size_t index) {
 static int _buffer_bline_count_chars(bline_t* bline) {
     char* c;
     int char_len;
+    uint32_t ch;
+    int char_w;
 
     // Return early if there is no data
     if (bline->data_len < 1) {
         bline->char_count = 0;
+        bline->char_width = 0;
         return MLBUF_OK;
     }
 
-    // Ensure space for char_indexes
+    // Ensure space for char_indexes and char_pos
     // It should have data_len elements at most
     if (!bline->char_indexes) {
         bline->char_indexes = malloc(bline->data_len * sizeof(size_t));
+        bline->char_pos = malloc(bline->data_len * sizeof(size_t));
         bline->char_indexes_cap = bline->data_len;
     } else if (bline->data_len > bline->char_indexes_cap) {
         bline->char_indexes = realloc(bline->char_indexes, bline->data_len * sizeof(size_t));
+        bline->char_pos = realloc(bline->char_pos, bline->data_len * sizeof(size_t));
         bline->char_indexes_cap = bline->data_len;
     }
 
-    // Count utf8 chars
+    // Count utf8 chars, keep track of byte indexes and char widths
     bline->char_count = 0;
+    bline->char_width = 0;
     for (c = bline->data; c < MLBUF_BLINE_DATA_STOP(bline); ) {
-        char_len = utf8_char_length(*c);
+        ch = 0;
+        char_len = utf8_char_to_unicode(&ch, c);
+        if (ch == '\t') {
+            // Special case for tabs
+            char_w = bline->buffer->tab_width - (bline->char_width % bline->buffer->tab_width);
+        } else {
+            char_w = wcwidth(ch);
+        }
+        // Let null and non-printable chars occupy 1 column
+        if (char_w < 0) char_w = 1;
+        if (char_len < 0) char_len = 1;
         bline->char_indexes[bline->char_count] = (size_t)(c - bline->data);
+        bline->char_pos[bline->char_count] = bline->char_width;
         bline->char_count += 1;
+        bline->char_width += char_w;
         c += char_len;
     }
 

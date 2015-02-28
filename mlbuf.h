@@ -33,7 +33,7 @@ struct buffer_s {
     char *data;
     size_t data_len;
     int is_data_dirty;
-    int ref_count;
+    int tab_width;
     buffer_callback_t callback;
     void* callback_udata;
     int is_in_callback;
@@ -49,6 +49,8 @@ struct bline_s {
     size_t data_cap;
     size_t line_index;
     size_t char_count;
+    size_t char_width;
+    size_t* char_pos;
     size_t* char_indexes;
     size_t char_indexes_cap;
     sblock_t* char_styles;
@@ -56,7 +58,6 @@ struct bline_s {
     mark_t* marks;
     srule_t* bol_rule;
     srule_t* eol_rule;
-    void* udata;
     bline_t* next;
     bline_t* prev;
 };
@@ -133,6 +134,7 @@ int buffer_redo(buffer_t* self);
 int buffer_add_srule(buffer_t* self, srule_t* srule);
 int buffer_remove_srule(buffer_t* self, srule_t* srule);
 int buffer_set_callback(buffer_t* self, buffer_callback_t cb, void* udata);
+int buffer_set_tab_width(buffer_t* self, int tab_width);
 int buffer_debug_dump(buffer_t* self, FILE* stream);
 int buffer_destroy(buffer_t* self);
 

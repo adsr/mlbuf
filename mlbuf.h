@@ -33,6 +33,7 @@ struct buffer_s {
     char *data;
     size_t data_len;
     int is_data_dirty;
+    int ref_count;
     int tab_width;
     buffer_callback_t callback;
     void* callback_udata;

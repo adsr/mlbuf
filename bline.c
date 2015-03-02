@@ -17,6 +17,7 @@ int bline_delete(bline_t* self, bint_t col, bint_t num_chars) {
 // Return a col given a byte index
 int bline_get_col(bline_t* self, bint_t index, bint_t* ret_col) {
     bint_t col;
+    MLBUF_MAKE_GT_EQ0(index);
     if (index == 0 || self->char_count == 0) {
         *ret_col = 0;
         return MLBUF_OK;

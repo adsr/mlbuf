@@ -29,7 +29,7 @@ int mark_insert_after(mark_t* self, char* data, bint_t data_len) {
     int rc;
     bint_t num_chars;
     if ((rc = bline_insert(self->bline, self->col, data, data_len, &num_chars)) == MLBUF_OK) {
-        rc = mark_move_by(self, ((bint_t)num_chars) * -1);
+        rc = mark_move_by(self, -1 * num_chars);
     }
     return rc;
 }
@@ -42,7 +42,7 @@ int mark_delete_after(mark_t* self, bint_t num_chars) {
 // Delete data before mark
 int mark_delete_before(mark_t* self, bint_t num_chars) {
     int rc;
-    if ((rc = mark_move_by(self, -1 * (bint_t)num_chars)) == MLBUF_OK) {
+    if ((rc = mark_move_by(self, -1 * num_chars)) == MLBUF_OK) {
         rc = mark_delete_after(self, num_chars);
     }
     return rc;
@@ -62,8 +62,8 @@ int mark_move_by(mark_t* self, bint_t char_delta) {
     buffer_get_offset(self->bline->buffer, self->bline, self->col, &offset);
     return mark_move_offset(
         self,
-        (bint_t)MLBUF_MIN(self->bline->buffer->char_count,
-            MLBUF_MAX(0, (bint_t)offset + char_delta)
+        MLBUF_MIN(self->bline->buffer->char_count,
+            MLBUF_MAX(0, offset + char_delta)
         )
     );
 }
@@ -417,7 +417,7 @@ static char* mark_find_match_prev(char* haystack, bint_t haystack_len, bint_t ma
         if (match == NULL) {
             return last_match;
         }
-        if ((bint_t)(match - ohaystack) > max_offset) {
+        if (match - ohaystack > max_offset) {
             return last_match;
         }
         // Override match_len to 1. Reasoning: If we have a haystack like
@@ -441,6 +441,7 @@ static int mark_find_re(mark_t* self, char* re, bint_t re_len, int reverse, blin
     pcre* cre;
     const char *error;
     int erroffset;
+    MLBUF_MAKE_GT_EQ0(re_len);
     regex = malloc(re_len + 1);
     snprintf(regex, re_len, "%s", re);
     cre = pcre_compile((const char*)regex, PCRE_NO_AUTO_CAPTURE, &error, &erroffset, NULL); // TODO utf8

@@ -173,6 +173,7 @@ int buffer_destroy(buffer_t* self) {
 mark_t* buffer_add_mark(buffer_t* self, bline_t* maybe_line, bint_t maybe_col) {
     mark_t* mark;
     mark = calloc(1, sizeof(mark_t));
+    MLBUF_MAKE_GT_EQ0(maybe_col);
     if (maybe_line != NULL) {
         mark->bline = maybe_line;
         mark->col = maybe_col;
@@ -224,6 +225,7 @@ int buffer_get(buffer_t* self, char** ret_data, bint_t* ret_data_len) {
 // Set buffer contents
 int buffer_set(buffer_t* self, char* data, bint_t data_len) {
     int rc;
+    MLBUF_MAKE_GT_EQ0(data_len);
     if ((rc = buffer_delete(self, 0, self->char_count)) != MLBUF_OK) {
         return rc;
     }
@@ -247,6 +249,8 @@ int buffer_insert(buffer_t* self, bint_t offset, char* data, bint_t data_len, bi
     bint_t ins_data_len;
     bint_t ins_data_nchars;
     baction_t* action;
+    MLBUF_MAKE_GT_EQ0(offset);
+    MLBUF_MAKE_GT_EQ0(data_len);
 
     // Exit early if no data
     if (data_len < 1) {
@@ -321,6 +325,8 @@ int buffer_delete(buffer_t* self, bint_t offset, bint_t num_chars) {
     bint_t safe_num_chars;
     bint_t orig_char_count;
     baction_t* action;
+    MLBUF_MAKE_GT_EQ0(offset);
+    MLBUF_MAKE_GT_EQ0(num_chars);
 
     // Find start/end line and col
     buffer_get_bline_col(self, offset, &start_line, &start_col);
@@ -390,6 +396,7 @@ int buffer_delete(buffer_t* self, bint_t offset, bint_t num_chars) {
 // Return a line given a line_index
 int buffer_get_bline(buffer_t* self, bint_t line_index, bline_t** ret_bline) {
     bline_t* tmp_line;
+    MLBUF_MAKE_GT_EQ0(line_index);
     for (tmp_line = self->first_line; tmp_line; tmp_line = tmp_line->next) {
         if (tmp_line->line_index == line_index) {
             *ret_bline = tmp_line;
@@ -404,6 +411,7 @@ int buffer_get_bline_col(buffer_t* self, bint_t offset, bline_t** ret_bline, bin
     bline_t* tmp_line;
     bline_t* good_line;
     bint_t remaining_chars;
+    MLBUF_MAKE_GT_EQ0(offset);
 
     remaining_chars = offset;
     for (tmp_line = self->first_line; tmp_line != NULL; tmp_line = tmp_line->next) {
@@ -427,6 +435,7 @@ int buffer_get_bline_col(buffer_t* self, bint_t offset, bline_t** ret_bline, bin
 int buffer_get_offset(buffer_t* self, bline_t* bline, bint_t col, bint_t* ret_offset) {
     bline_t* tmp_line;
     bint_t offset;
+    MLBUF_MAKE_GT_EQ0(col);
 
     offset = 0;
     for (tmp_line = self->first_line; tmp_line != bline->next; tmp_line = tmp_line->next) {
@@ -607,6 +616,8 @@ int buffer_substr(buffer_t* self, bline_t* start_line, bint_t start_col, bline_t
     bint_t copy_index;
     bint_t add_len;
     bint_t nchars;
+    MLBUF_MAKE_GT_EQ0(start_col);
+    MLBUF_MAKE_GT_EQ0(end_col);
 
     data = calloc(2, sizeof(char));
     data_len = 0;

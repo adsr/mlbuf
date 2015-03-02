@@ -50,8 +50,8 @@ struct bline_s {
     size_t data_cap;
     size_t line_index;
     size_t char_count;
-    size_t char_width;
-    size_t* char_pos;
+    size_t char_vwidth;
+    size_t* char_vcol;
     size_t* char_indexes;
     size_t char_indexes_cap;
     sblock_t* char_styles;

@@ -486,7 +486,7 @@ int buffer_set_callback(buffer_t* self, buffer_callback_t cb, void* udata) {
     return MLBUF_OK;
 }
 
-// Set tab_width and recalculate all line char widths
+// Set tab_width and recalculate all line char vwidths
 int buffer_set_tab_width(buffer_t* self, int tab_width) {
     bline_t* tmp_line;
     if (tab_width < 1) {
@@ -552,7 +552,7 @@ int buffer_debug_dump(buffer_t* self, FILE* stream) {
         fprintf(stream, "    char_indexes+pos=");
         if (bline_tmp->char_indexes) {
             for (j = 0; j < bline_tmp->char_count; j++) {
-                fprintf(stream, "%lu@%lu ", bline_tmp->char_indexes[j], bline_tmp->char_pos[j]);
+                fprintf(stream, "%lu@%lu ", bline_tmp->char_indexes[j], bline_tmp->char_vcol[j]);
             }
         }
         fprintf(stream, "\n    char_styles_cap=%lu\n", bline_tmp->char_styles_cap);
@@ -1027,7 +1027,7 @@ static int _buffer_bline_free(bline_t* bline, bline_t* maybe_mark_line, size_t c
     mark_t* mark;
     mark_t* mark_tmp;
     if (bline->data) free(bline->data);
-    if (bline->char_pos) free(bline->char_pos);
+    if (bline->char_vcol) free(bline->char_vcol);
     if (bline->char_indexes) free(bline->char_indexes);
     if (bline->char_styles) free(bline->char_styles);
     if (bline->marks) {
@@ -1217,31 +1217,31 @@ static int _buffer_bline_count_chars(bline_t* bline) {
     // Return early if there is no data
     if (bline->data_len < 1) {
         bline->char_count = 0;
-        bline->char_width = 0;
+        bline->char_vwidth = 0;
         return MLBUF_OK;
     }
 
-    // Ensure space for char_indexes and char_pos
+    // Ensure space for char_indexes and char_vcol
     // It should have data_len elements at most
     if (!bline->char_indexes) {
         bline->char_indexes = malloc(bline->data_len * sizeof(size_t));
-        bline->char_pos = malloc(bline->data_len * sizeof(size_t));
+        bline->char_vcol = malloc(bline->data_len * sizeof(size_t));
         bline->char_indexes_cap = bline->data_len;
     } else if (bline->data_len > bline->char_indexes_cap) {
         bline->char_indexes = realloc(bline->char_indexes, bline->data_len * sizeof(size_t));
-        bline->char_pos = realloc(bline->char_pos, bline->data_len * sizeof(size_t));
+        bline->char_vcol = realloc(bline->char_vcol, bline->data_len * sizeof(size_t));
         bline->char_indexes_cap = bline->data_len;
     }
 
-    // Count utf8 chars, keep track of byte indexes and char widths
+    // Count utf8 chars, keep track of byte indexes and char vwidths
     bline->char_count = 0;
-    bline->char_width = 0;
+    bline->char_vwidth = 0;
     for (c = bline->data; c < MLBUF_BLINE_DATA_STOP(bline); ) {
         ch = 0;
         char_len = utf8_char_to_unicode(&ch, c);
         if (ch == '\t') {
             // Special case for tabs
-            char_w = bline->buffer->tab_width - (bline->char_width % bline->buffer->tab_width);
+            char_w = bline->buffer->tab_width - (bline->char_vwidth % bline->buffer->tab_width);
         } else {
             char_w = wcwidth(ch);
         }
@@ -1249,9 +1249,9 @@ static int _buffer_bline_count_chars(bline_t* bline) {
         if (char_w < 0) char_w = 1;
         if (char_len < 0) char_len = 1;
         bline->char_indexes[bline->char_count] = (size_t)(c - bline->data);
-        bline->char_pos[bline->char_count] = bline->char_width;
+        bline->char_vcol[bline->char_count] = bline->char_vwidth;
         bline->char_count += 1;
-        bline->char_width += char_w;
+        bline->char_vwidth += char_w;
         c += char_len;
     }
 

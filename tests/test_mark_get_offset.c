@@ -1,7 +1,7 @@
 #include "test.h"
 
 MAIN("hello\nworld",
-    size_t offset;
+    bint_t offset;
 
     mark_move_end(cur);
     mark_get_offset(cur, &offset);

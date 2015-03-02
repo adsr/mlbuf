@@ -1,7 +1,7 @@
 #include "test.h"
 
 MAIN("0\n1\n2\n3\n4\n",
-    size_t i;
+    bint_t i;
     bline_t* line;
     bline_t* line2;
     for (line = buf->first_line, i = 0; line; line = line->next, i += 1) {

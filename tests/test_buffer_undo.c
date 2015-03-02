@@ -2,7 +2,7 @@
 
 MAIN("hi",
     char* data;
-    size_t data_len;
+    bint_t data_len;
 
     buffer_delete(buf, 0, 1);
     buffer_undo(buf);

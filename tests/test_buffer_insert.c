@@ -2,8 +2,8 @@
 
 MAIN("hello\nworld",
     char *data;
-    size_t data_len;
-    size_t nchars;
+    bint_t data_len;
+    bint_t nchars;
 
     buffer_insert(buf, 0, "\xe4\xb8\x96\xe7\x95\x8c\n", 7, &nchars);
     buffer_get(buf, &data, &data_len);

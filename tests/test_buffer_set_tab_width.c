@@ -3,10 +3,10 @@
 #define comma ,
 
 MAIN("he\tllo\t\t",
-    size_t i;
-    size_t char_vcols_4[8] = {0 comma  1 comma  2 comma  4 comma  5 comma  6 comma  7 comma  8};
-    size_t char_vcols_2a[8] = {0 comma  1 comma  2 comma  4 comma  5 comma  6 comma  7 comma  8};
-    size_t char_vcols_2b[9] = {0 comma  1 comma  2 comma  4 comma  5 comma  6 comma  7 comma  8 comma  10};
+    bint_t i;
+    bint_t char_vcols_4[8] = {0 comma  1 comma  2 comma  4 comma  5 comma  6 comma  7 comma  8};
+    bint_t char_vcols_2a[8] = {0 comma  1 comma  2 comma  4 comma  5 comma  6 comma  7 comma  8};
+    bint_t char_vcols_2b[9] = {0 comma  1 comma  2 comma  4 comma  5 comma  6 comma  7 comma  8 comma  10};
 
     buffer_set_tab_width(buf, 4);
     // [he  llo     ] // char_vcol

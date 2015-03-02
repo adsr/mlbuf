@@ -1,7 +1,7 @@
 #include "test.h"
 
 MAIN("hello\nworld",
-    size_t offset;
+    bint_t offset;
 
     buffer_get_offset(buf, buf->first_line, 0, &offset);
     ASSERT("f0", 0, offset);

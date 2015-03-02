@@ -1,22 +1,22 @@
 #include "mlbuf.h"
 
 // Insert data on a line
-int bline_insert(bline_t* self, size_t col, char* data, size_t data_len, size_t* ret_num_chars) {
-    size_t offset;
+int bline_insert(bline_t* self, bint_t col, char* data, bint_t data_len, bint_t* ret_num_chars) {
+    bint_t offset;
     buffer_get_offset(self->buffer, self, col, &offset);
     return buffer_insert(self->buffer, offset, data, data_len, ret_num_chars);
 }
 
 // Delete data from a line
-int bline_delete(bline_t* self, size_t col, size_t num_chars) {
-    size_t offset;
+int bline_delete(bline_t* self, bint_t col, bint_t num_chars) {
+    bint_t offset;
     buffer_get_offset(self->buffer, self, col, &offset);
     return buffer_delete(self->buffer, offset, num_chars);
 }
 
 // Return a col given a byte index
-int bline_get_col(bline_t* self, size_t index, size_t* ret_col) {
-    size_t col;
+int bline_get_col(bline_t* self, bint_t index, bint_t* ret_col) {
+    bint_t col;
     if (index == 0 || self->char_count == 0) {
         *ret_col = 0;
         return MLBUF_OK;

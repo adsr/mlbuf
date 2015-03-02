@@ -3,7 +3,7 @@
 MAIN("h\xc3\x85llo \xe4\xb8\x96\xe7\x95\x8c", // "hallo ww"
 //    01   2   34567   8   9   10  11  12
 //    01       23456           7
-    size_t col;
+    bint_t col;
     ASSERT("len", 8, buf->char_count);
 
     bline_get_col(buf->first_line, 0, &col);

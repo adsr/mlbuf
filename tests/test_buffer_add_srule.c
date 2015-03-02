@@ -1,7 +1,7 @@
 #include "test.h"
 
 MAIN("hello\nworld",
-    size_t i;
+    bint_t i;
     srule_t* srule1;
     srule_t* srule2;
 

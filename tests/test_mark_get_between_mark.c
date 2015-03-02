@@ -2,7 +2,7 @@
 
 MAIN("hello\nworld",
     char* str;
-    size_t str_len;
+    bint_t str_len;
     mark_t* other;
     other = buffer_add_mark(buf, NULL, 0);
     mark_move_beginning(cur);

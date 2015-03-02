@@ -1,7 +1,7 @@
 #include "test.h"
 
 MAIN("hello\nworld",
-    size_t i;
+    bint_t i;
     srule_t* srule;
     srule = srule_new_single("world", sizeof("world")-1, 1, 2);
     buffer_add_srule(buf, srule);

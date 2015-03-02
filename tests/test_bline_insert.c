@@ -2,7 +2,7 @@
 
 MAIN("hello\nworld",
     char *data;
-    size_t data_len;
+    bint_t data_len;
 
     bline_insert(buf->first_line, 5, "\n", 1, NULL);
     buffer_get(buf, &data, &data_len);

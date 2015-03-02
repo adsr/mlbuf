@@ -2,7 +2,7 @@
 
 MAIN("hello\nworld",
     bline_t* line;
-    size_t col;
+    bint_t col;
 
     buffer_get_bline_col(buf, 0, &line, &col);
     ASSERT("0line", buf->first_line, line);

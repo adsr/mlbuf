@@ -11,26 +11,26 @@
 #include "mlbuf.h"
 #include "utlist.h"
 
-static int _buffer_baction_do(buffer_t* self, bline_t* bline, baction_t* action, int is_redo, size_t* opt_repeat_offset);
+static int _buffer_baction_do(buffer_t* self, bline_t* bline, baction_t* action, int is_redo, bint_t* opt_repeat_offset);
 static int _buffer_update(buffer_t* self, baction_t* action);
 static int _buffer_truncate_undo_stack(buffer_t* self, baction_t* action_from);
 static int _buffer_add_to_undo_stack(buffer_t* self, baction_t* action);
-static int _buffer_apply_styles(bline_t* start_line, ssize_t line_delta);
-static int _buffer_apply_styles_singles(bline_t* start_line, size_t min_nlines);
-static int _buffer_apply_styles_multis(bline_t* start_line, size_t min_nlines);
+static int _buffer_apply_styles(bline_t* start_line, bint_t line_delta);
+static int _buffer_apply_styles_singles(bline_t* start_line, bint_t min_nlines);
+static int _buffer_apply_styles_multis(bline_t* start_line, bint_t min_nlines);
 static int _buffer_bline_apply_style_single(srule_t* srule, bline_t* bline);
-static int _buffer_bline_apply_style_multi(srule_t* srule, bline_t* bline, srule_t** open_rule, size_t* look_offset);
+static int _buffer_bline_apply_style_multi(srule_t* srule, bline_t* bline, srule_t** open_rule, bint_t* look_offset);
 static bline_t* _buffer_bline_new(buffer_t* self);
-static int _buffer_bline_free(bline_t* bline, bline_t* maybe_mark_line, size_t col_delta);
-static bline_t* _buffer_bline_break(bline_t* bline, size_t col);
-static size_t _buffer_bline_insert(bline_t* bline, size_t col, char* data, size_t data_len, int move_marks);
-static size_t _buffer_bline_delete(bline_t* bline, size_t col, size_t num_chars);
-static size_t _buffer_bline_col_to_index(bline_t* bline, size_t col);
-static size_t _buffer_bline_index_to_col(bline_t* bline, size_t index);
+static int _buffer_bline_free(bline_t* bline, bline_t* maybe_mark_line, bint_t col_delta);
+static bline_t* _buffer_bline_break(bline_t* bline, bint_t col);
+static bint_t _buffer_bline_insert(bline_t* bline, bint_t col, char* data, bint_t data_len, int move_marks);
+static bint_t _buffer_bline_delete(bline_t* bline, bint_t col, bint_t num_chars);
+static bint_t _buffer_bline_col_to_index(bline_t* bline, bint_t col);
+static bint_t _buffer_bline_index_to_col(bline_t* bline, bint_t index);
 static int _buffer_bline_count_chars(bline_t* bline);
-static int _srule_multi_find(srule_t* rule, int find_end, bline_t* bline, size_t start_offset, size_t* ret_start, size_t* ret_stop);
-static int _srule_multi_find_start(srule_t* rule, bline_t* bline, size_t start_offset, size_t* ret_start, size_t* ret_stop);
-static int _srule_multi_find_end(srule_t* rule, bline_t* bline, size_t start_offset, size_t* ret_stop);
+static int _srule_multi_find(srule_t* rule, int find_end, bline_t* bline, bint_t start_offset, bint_t* ret_start, bint_t* ret_stop);
+static int _srule_multi_find_start(srule_t* rule, bline_t* bline, bint_t start_offset, bint_t* ret_start, bint_t* ret_stop);
+static int _srule_multi_find_end(srule_t* rule, bline_t* bline, bint_t start_offset, bint_t* ret_stop);
 static int _baction_destroy(baction_t* action);
 
 // Make a new buffer and return it
@@ -48,7 +48,7 @@ buffer_t* buffer_new() {
 }
 
 // Wrapper for buffer_new + buffer_open
-buffer_t* buffer_new_open(char* path, size_t path_len) {
+buffer_t* buffer_new_open(char* path, bint_t path_len) {
     buffer_t* self;
     int rc;
     self = buffer_new();
@@ -60,7 +60,7 @@ buffer_t* buffer_new_open(char* path, size_t path_len) {
 }
 
 // Read buffer from path
-int buffer_open(buffer_t* self, char* opath, size_t opath_len) {
+int buffer_open(buffer_t* self, char* opath, bint_t opath_len) {
     char* path;
     int rc;
     int fd;
@@ -108,11 +108,11 @@ int buffer_save(buffer_t* self) {
 }
 
 // Write buffer to specified path
-int buffer_save_as(buffer_t* self, char* opath, size_t opath_len) {
+int buffer_save_as(buffer_t* self, char* opath, bint_t opath_len) {
     char* path;
     FILE* fp;
     char *data;
-    size_t data_len;
+    bint_t data_len;
 
     // Exit early if path is empty
     if (!opath || opath_len < 1) {
@@ -165,7 +165,7 @@ int buffer_destroy(buffer_t* self) {
 }
 
 // Add a mark to this buffer and return it
-mark_t* buffer_add_mark(buffer_t* self, bline_t* maybe_line, size_t maybe_col) {
+mark_t* buffer_add_mark(buffer_t* self, bline_t* maybe_line, bint_t maybe_col) {
     mark_t* mark;
     mark = calloc(1, sizeof(mark_t));
     if (maybe_line != NULL) {
@@ -185,10 +185,10 @@ mark_t* buffer_add_mark(buffer_t* self, bline_t* maybe_line, size_t maybe_col) {
 }
 
 // Get buffer contents and length
-int buffer_get(buffer_t* self, char** ret_data, size_t* ret_data_len) {
+int buffer_get(buffer_t* self, char** ret_data, bint_t* ret_data_len) {
     bline_t* bline;
     char* data_cursor;
-    size_t alloc_size;
+    bint_t alloc_size;
     if (self->is_data_dirty) {
         // Refresh self->data
         alloc_size = self->byte_count + 2;
@@ -208,7 +208,7 @@ int buffer_get(buffer_t* self, char** ret_data, size_t* ret_data_len) {
             }
         }
         *data_cursor = '\0';
-        self->data_len = (size_t)(data_cursor - self->data);
+        self->data_len = (bint_t)(data_cursor - self->data);
         self->is_data_dirty = 0;
     }
     *ret_data = self->data;
@@ -217,7 +217,7 @@ int buffer_get(buffer_t* self, char** ret_data, size_t* ret_data_len) {
 }
 
 // Set buffer contents
-int buffer_set(buffer_t* self, char* data, size_t data_len) {
+int buffer_set(buffer_t* self, char* data, bint_t data_len) {
     int rc;
     if ((rc = buffer_delete(self, 0, self->char_count)) != MLBUF_OK) {
         return rc;
@@ -226,21 +226,21 @@ int buffer_set(buffer_t* self, char* data, size_t data_len) {
 }
 
 // Insert data into buffer
-int buffer_insert(buffer_t* self, size_t offset, char* data, size_t data_len, size_t* ret_num_chars) {
+int buffer_insert(buffer_t* self, bint_t offset, char* data, bint_t data_len, bint_t* ret_num_chars) {
     int rc;
     bline_t* start_line;
-    size_t start_col;
+    bint_t start_col;
     bline_t* cur_line;
-    size_t cur_col;
+    bint_t cur_col;
     bline_t* new_line;
     char* data_cursor;
     char* data_newline;
-    size_t data_remaining_len;
-    size_t insert_len;
-    size_t num_lines_added;
+    bint_t data_remaining_len;
+    bint_t insert_len;
+    bint_t num_lines_added;
     char* ins_data;
-    size_t ins_data_len;
-    size_t ins_data_nchars;
+    bint_t ins_data_len;
+    bint_t ins_data_nchars;
     baction_t* action;
 
     // Exit early if no data
@@ -260,7 +260,7 @@ int buffer_insert(buffer_t* self, size_t offset, char* data, size_t data_len, si
     cur_col = start_col;
     num_lines_added = 0;
     while (data_remaining_len > 0 && (data_newline = memchr(data_cursor, '\n', data_remaining_len)) != NULL) {
-        insert_len = (size_t)(data_newline - data_cursor);
+        insert_len = (bint_t)(data_newline - data_cursor);
         new_line = _buffer_bline_break(cur_line, cur_col);
         num_lines_added += 1;
         if (insert_len > 0) {
@@ -288,9 +288,9 @@ int buffer_insert(buffer_t* self, size_t offset, char* data, size_t data_len, si
     action->maybe_end_line = cur_line;
     action->maybe_end_line_index = action->start_line_index + num_lines_added;
     action->maybe_end_col = cur_col;
-    action->byte_delta = (ssize_t)ins_data_len;
-    action->char_delta = (ssize_t)ins_data_nchars;
-    action->line_delta = (ssize_t)num_lines_added;
+    action->byte_delta = (bint_t)ins_data_len;
+    action->char_delta = (bint_t)ins_data_nchars;
+    action->line_delta = (bint_t)num_lines_added;
     action->data = ins_data;
     action->data_len = ins_data_len;
     _buffer_update(self, action);
@@ -300,21 +300,21 @@ int buffer_insert(buffer_t* self, size_t offset, char* data, size_t data_len, si
 }
 
 // Delete data from buffer
-int buffer_delete(buffer_t* self, size_t offset, size_t num_chars) {
+int buffer_delete(buffer_t* self, bint_t offset, bint_t num_chars) {
     bline_t* start_line;
-    size_t start_col;
+    bint_t start_col;
     bline_t* end_line;
-    size_t end_col;
+    bint_t end_col;
     bline_t* tmp_line;
     bline_t* swap_line;
     bline_t* next_line;
-    size_t tmp_len;
+    bint_t tmp_len;
     char* del_data;
-    size_t del_data_len;
-    size_t del_data_nchars;
-    size_t num_lines_removed;
-    size_t safe_num_chars;
-    size_t orig_char_count;
+    bint_t del_data_len;
+    bint_t del_data_nchars;
+    bint_t num_lines_removed;
+    bint_t safe_num_chars;
+    bint_t orig_char_count;
     baction_t* action;
 
     // Find start/end line and col
@@ -372,9 +372,9 @@ int buffer_delete(buffer_t* self, size_t offset, size_t num_chars) {
     action->start_line = start_line;
     action->start_line_index = start_line->line_index;
     action->start_col = start_col;
-    action->byte_delta = -1 * (ssize_t)del_data_len;
-    action->char_delta = -1 * (ssize_t)del_data_nchars;
-    action->line_delta = -1 * (ssize_t)num_lines_removed;
+    action->byte_delta = -1 * (bint_t)del_data_len;
+    action->char_delta = -1 * (bint_t)del_data_nchars;
+    action->line_delta = -1 * (bint_t)num_lines_removed;
     action->data = del_data;
     action->data_len = del_data_len;
     _buffer_update(self, action);
@@ -383,7 +383,7 @@ int buffer_delete(buffer_t* self, size_t offset, size_t num_chars) {
 }
 
 // Return a line given a line_index
-int buffer_get_bline(buffer_t* self, size_t line_index, bline_t** ret_bline) {
+int buffer_get_bline(buffer_t* self, bint_t line_index, bline_t** ret_bline) {
     bline_t* tmp_line;
     for (tmp_line = self->first_line; tmp_line; tmp_line = tmp_line->next) {
         if (tmp_line->line_index == line_index) {
@@ -395,10 +395,10 @@ int buffer_get_bline(buffer_t* self, size_t line_index, bline_t** ret_bline) {
 }
 
 // Return a line and col for the given offset
-int buffer_get_bline_col(buffer_t* self, size_t offset, bline_t** ret_bline, size_t* ret_col) {
+int buffer_get_bline_col(buffer_t* self, bint_t offset, bline_t** ret_bline, bint_t* ret_col) {
     bline_t* tmp_line;
     bline_t* good_line;
-    size_t remaining_chars;
+    bint_t remaining_chars;
 
     remaining_chars = offset;
     for (tmp_line = self->first_line; tmp_line != NULL; tmp_line = tmp_line->next) {
@@ -419,9 +419,9 @@ int buffer_get_bline_col(buffer_t* self, size_t offset, bline_t** ret_bline, siz
 }
 
 // Return an offset given a line and col
-int buffer_get_offset(buffer_t* self, bline_t* bline, size_t col, size_t* ret_offset) {
+int buffer_get_offset(buffer_t* self, bline_t* bline, bint_t col, bint_t* ret_offset) {
     bline_t* tmp_line;
-    size_t offset;
+    bint_t offset;
 
     offset = 0;
     for (tmp_line = self->first_line; tmp_line != bline->next; tmp_line = tmp_line->next) {
@@ -502,12 +502,12 @@ int buffer_set_tab_width(buffer_t* self, int tab_width) {
 // Print buffer debug info to stream
 int buffer_debug_dump(buffer_t* self, FILE* stream) {
     int i;
-    size_t j;
+    bint_t j;
     bline_t* bline_tmp;
     srule_node_t* srule_tmp;
     mark_t* mark_tmp;
     char* mark_str;
-    size_t mark_str_len;
+    bint_t mark_str_len;
     mark_str = NULL;
     mark_str_len = 0;
     fprintf(stream, "first_line=%lu\n", self->first_line->line_index);
@@ -593,15 +593,15 @@ int buffer_debug_dump(buffer_t* self, FILE* stream) {
 }
 
 // Return data from start_line:start_col thru end_line:end_col
-int buffer_substr(buffer_t* self, bline_t* start_line, size_t start_col, bline_t* end_line, size_t end_col, char** ret_data, size_t* ret_data_len, size_t* ret_data_nchars) {
+int buffer_substr(buffer_t* self, bline_t* start_line, bint_t start_col, bline_t* end_line, bint_t end_col, char** ret_data, bint_t* ret_data_len, bint_t* ret_data_nchars) {
     char* data;
-    size_t data_len;
-    size_t data_size;
+    bint_t data_len;
+    bint_t data_size;
     bline_t* tmp_line;
-    size_t copy_len;
-    size_t copy_index;
-    size_t add_len;
-    size_t nchars;
+    bint_t copy_len;
+    bint_t copy_index;
+    bint_t add_len;
+    bint_t nchars;
 
     data = calloc(2, sizeof(char));
     data_len = 0;
@@ -728,17 +728,17 @@ int buffer_redo(buffer_t* self) {
     return rc;
 }
 
-static int _buffer_baction_do(buffer_t* self, bline_t* bline, baction_t* action, int is_redo, size_t* opt_repeat_offset) {
+static int _buffer_baction_do(buffer_t* self, bline_t* bline, baction_t* action, int is_redo, bint_t* opt_repeat_offset) {
     int rc;
-    size_t col;
-    size_t offset;
+    bint_t col;
+    bint_t offset;
     self->_is_in_undo = 1;
     col = opt_repeat_offset ? *opt_repeat_offset : action->start_col;
     buffer_get_offset(self, bline, col, &offset);
     if ((action->type == MLBUF_BACTION_TYPE_DELETE && is_redo)
         || (action->type == MLBUF_BACTION_TYPE_INSERT && !is_redo)
     ) {
-        rc = buffer_delete(self, offset, (size_t)((is_redo ? -1 : 1) * action->char_delta));
+        rc = buffer_delete(self, offset, (bint_t)((is_redo ? -1 : 1) * action->char_delta));
     } else {
         rc = buffer_insert(self, offset, action->data, action->data_len, NULL);
     }
@@ -749,7 +749,7 @@ static int _buffer_baction_do(buffer_t* self, bline_t* bline, baction_t* action,
 static int _buffer_update(buffer_t* self, baction_t* action) {
     bline_t* tmp_line;
     bline_t* last_line;
-    size_t new_line_index;
+    bint_t new_line_index;
 
     // Adjust counts
     self->byte_count += action->byte_delta;
@@ -823,8 +823,8 @@ static int _buffer_add_to_undo_stack(buffer_t* self, baction_t* action) {
     return MLBUF_OK;
 }
 
-static int _buffer_apply_styles(bline_t* start_line, ssize_t line_delta) {
-    size_t min_nlines;
+static int _buffer_apply_styles(bline_t* start_line, bint_t line_delta) {
+    bint_t min_nlines;
 
     // min_nlines, minimum number of lines to style
     //     line_delta  < 0: 2 (start_line + 1)
@@ -838,10 +838,10 @@ static int _buffer_apply_styles(bline_t* start_line, ssize_t line_delta) {
     return MLBUF_OK;
 }
 
-static int _buffer_apply_styles_singles(bline_t* start_line, size_t min_nlines) {
+static int _buffer_apply_styles_singles(bline_t* start_line, bint_t min_nlines) {
     bline_t* cur_line;
     srule_node_t* srule_node;
-    size_t styled_nlines;
+    bint_t styled_nlines;
 
     // Apply styles starting at start_line
     cur_line = start_line;
@@ -868,12 +868,12 @@ static int _buffer_apply_styles_singles(bline_t* start_line, size_t min_nlines) 
     return MLBUF_OK;
 }
 
-static int _buffer_apply_styles_multis(bline_t* start_line, size_t min_nlines) {
+static int _buffer_apply_styles_multis(bline_t* start_line, bint_t min_nlines) {
     bline_t* cur_line;
     srule_node_t* srule_node;
     srule_t* open_rule;
-    size_t styled_nlines;
-    size_t multi_look_offset;
+    bint_t styled_nlines;
+    bint_t multi_look_offset;
     int open_rule_ended;
     int already_open;
 
@@ -946,9 +946,9 @@ static int _buffer_apply_styles_multis(bline_t* start_line, size_t min_nlines) {
 static int _buffer_bline_apply_style_single(srule_t* srule, bline_t* bline) {
     int rc;
     int substrs[3];
-    size_t start;
-    size_t stop;
-    size_t look_offset;
+    bint_t start;
+    bint_t stop;
+    bint_t look_offset;
     look_offset = 0;
     while (look_offset < bline->char_count) {
         if ((rc = pcre_exec(srule->cre, NULL, bline->data, bline->data_len, look_offset, 0, substrs, 3)) >= 0) {
@@ -965,10 +965,10 @@ static int _buffer_bline_apply_style_single(srule_t* srule, bline_t* bline) {
     return MLBUF_OK;
 }
 
-static int _buffer_bline_apply_style_multi(srule_t* srule, bline_t* bline, srule_t** open_rule, size_t* look_offset) {
-    size_t start;
-    size_t start_stop;
-    size_t end;
+static int _buffer_bline_apply_style_multi(srule_t* srule, bline_t* bline, srule_t** open_rule, bint_t* look_offset) {
+    bint_t start;
+    bint_t start_stop;
+    bint_t end;
     int found_start;
     int found_end;
 
@@ -1023,7 +1023,7 @@ static bline_t* _buffer_bline_new(buffer_t* self) {
     return bline;
 }
 
-static int _buffer_bline_free(bline_t* bline, bline_t* maybe_mark_line, size_t col_delta) {
+static int _buffer_bline_free(bline_t* bline, bline_t* maybe_mark_line, bint_t col_delta) {
     mark_t* mark;
     mark_t* mark_tmp;
     if (bline->data) free(bline->data);
@@ -1044,9 +1044,9 @@ static int _buffer_bline_free(bline_t* bline, bline_t* maybe_mark_line, size_t c
     return MLBUF_OK;
 }
 
-static bline_t* _buffer_bline_break(bline_t* bline, size_t col) {
-    size_t index;
-    size_t len;
+static bline_t* _buffer_bline_break(bline_t* bline, bint_t col) {
+    bint_t index;
+    bint_t len;
     bline_t* new_line;
     bline_t* tmp_line;
     mark_t* mark;
@@ -1089,12 +1089,12 @@ static bline_t* _buffer_bline_break(bline_t* bline, size_t col) {
     return new_line;
 }
 
-static size_t _buffer_bline_insert(bline_t* bline, size_t col, char* data, size_t data_len, int move_marks) {
-    size_t index;
+static bint_t _buffer_bline_insert(bline_t* bline, bint_t col, char* data, bint_t data_len, int move_marks) {
+    bint_t index;
     mark_t* mark;
     mark_t* mark_tmp;
-    size_t orig_char_count;
-    size_t num_chars_added;
+    bint_t orig_char_count;
+    bint_t num_chars_added;
 
     // Ensure space for data
     if (!bline->data) {
@@ -1134,15 +1134,15 @@ static size_t _buffer_bline_insert(bline_t* bline, size_t col, char* data, size_
     return num_chars_added;
 }
 
-static size_t _buffer_bline_delete(bline_t* bline, size_t col, size_t num_chars) {
-    size_t safe_num_chars;
-    size_t index;
-    size_t index_end;
-    size_t move_len;
+static bint_t _buffer_bline_delete(bline_t* bline, bint_t col, bint_t num_chars) {
+    bint_t safe_num_chars;
+    bint_t index;
+    bint_t index_end;
+    bint_t move_len;
     mark_t* mark;
     mark_t* mark_tmp;
-    size_t orig_char_count;
-    size_t num_chars_deleted;
+    bint_t orig_char_count;
+    bint_t num_chars_deleted;
 
     // Clamp num_chars
     safe_num_chars = MLBUF_MIN(bline->char_count - col, num_chars);
@@ -1159,7 +1159,7 @@ static size_t _buffer_bline_delete(bline_t* bline, size_t col, size_t num_chars)
     // Find delete bounds
     index = _buffer_bline_col_to_index(bline, col);
     index_end = _buffer_bline_col_to_index(bline, col + safe_num_chars);
-    move_len = (size_t)(bline->data_len - index_end);
+    move_len = (bint_t)(bline->data_len - index_end);
 
     // Shift data
     if (move_len > 0) {
@@ -1182,8 +1182,8 @@ static size_t _buffer_bline_delete(bline_t* bline, size_t col, size_t num_chars)
     return num_chars_deleted;
 }
 
-static size_t _buffer_bline_col_to_index(bline_t* bline, size_t col) {
-    size_t index;
+static bint_t _buffer_bline_col_to_index(bline_t* bline, bint_t col) {
+    bint_t index;
     if (!bline->char_indexes) {
         return 0;
     }
@@ -1195,8 +1195,8 @@ static size_t _buffer_bline_col_to_index(bline_t* bline, size_t col) {
     return index;
 }
 
-static size_t _buffer_bline_index_to_col(bline_t* bline, size_t index) {
-    size_t col;
+static bint_t _buffer_bline_index_to_col(bline_t* bline, bint_t index) {
+    bint_t col;
     if (!bline->char_indexes) {
         return 0;
     }
@@ -1224,12 +1224,12 @@ static int _buffer_bline_count_chars(bline_t* bline) {
     // Ensure space for char_indexes and char_vcol
     // It should have data_len elements at most
     if (!bline->char_indexes) {
-        bline->char_indexes = malloc(bline->data_len * sizeof(size_t));
-        bline->char_vcol = malloc(bline->data_len * sizeof(size_t));
+        bline->char_indexes = malloc(bline->data_len * sizeof(bint_t));
+        bline->char_vcol = malloc(bline->data_len * sizeof(bint_t));
         bline->char_indexes_cap = bline->data_len;
     } else if (bline->data_len > bline->char_indexes_cap) {
-        bline->char_indexes = realloc(bline->char_indexes, bline->data_len * sizeof(size_t));
-        bline->char_vcol = realloc(bline->char_vcol, bline->data_len * sizeof(size_t));
+        bline->char_indexes = realloc(bline->char_indexes, bline->data_len * sizeof(bint_t));
+        bline->char_vcol = realloc(bline->char_vcol, bline->data_len * sizeof(bint_t));
         bline->char_indexes_cap = bline->data_len;
     }
 
@@ -1248,7 +1248,7 @@ static int _buffer_bline_count_chars(bline_t* bline) {
         // Let null and non-printable chars occupy 1 column
         if (char_w < 0) char_w = 1;
         if (char_len < 0) char_len = 1;
-        bline->char_indexes[bline->char_count] = (size_t)(c - bline->data);
+        bline->char_indexes[bline->char_count] = (bint_t)(c - bline->data);
         bline->char_vcol[bline->char_count] = bline->char_vwidth;
         bline->char_count += 1;
         bline->char_vwidth += char_w;
@@ -1271,7 +1271,7 @@ static int _buffer_bline_count_chars(bline_t* bline) {
 }
 
 // Make a new single-line style rule
-srule_t* srule_new_single(char* re, size_t re_len, uint16_t fg, uint16_t bg) {
+srule_t* srule_new_single(char* re, bint_t re_len, uint16_t fg, uint16_t bg) {
     srule_t* rule;
     const char *re_error;
     int re_erroffset;
@@ -1291,7 +1291,7 @@ srule_t* srule_new_single(char* re, size_t re_len, uint16_t fg, uint16_t bg) {
 }
 
 // Make a new multi-line style rule
-srule_t* srule_new_multi(char* re, size_t re_len, char* re_end, size_t re_end_len, uint16_t fg, uint16_t bg) {
+srule_t* srule_new_multi(char* re, bint_t re_len, char* re_end, bint_t re_end_len, uint16_t fg, uint16_t bg) {
     srule_t* rule;
     const char *re_error;
     int re_erroffset;
@@ -1335,11 +1335,11 @@ int srule_destroy(srule_t* srule) {
     return MLBUF_OK;
 }
 
-static int _srule_multi_find(srule_t* rule, int find_end, bline_t* bline, size_t start_offset, size_t* ret_start, size_t* ret_stop) {
+static int _srule_multi_find(srule_t* rule, int find_end, bline_t* bline, bint_t start_offset, bint_t* ret_start, bint_t* ret_stop) {
     int rc;
     pcre* cre;
     int substrs[3];
-    size_t start_index;
+    bint_t start_index;
     mark_t* mark;
 
     if (rule->type == MLBUF_SRULE_TYPE_RANGE) {
@@ -1365,12 +1365,12 @@ static int _srule_multi_find(srule_t* rule, int find_end, bline_t* bline, size_t
     return 0;
 }
 
-static int _srule_multi_find_start(srule_t* rule, bline_t* bline, size_t start_offset, size_t* ret_start, size_t* ret_stop) {
+static int _srule_multi_find_start(srule_t* rule, bline_t* bline, bint_t start_offset, bint_t* ret_start, bint_t* ret_stop) {
     return _srule_multi_find(rule, 0, bline, start_offset, ret_start, ret_stop);
 }
 
-static int _srule_multi_find_end(srule_t* rule, bline_t* bline, size_t start_offset, size_t* ret_stop) {
-    size_t ignore;
+static int _srule_multi_find_end(srule_t* rule, bline_t* bline, bint_t start_offset, bint_t* ret_stop) {
+    bint_t ignore;
     return _srule_multi_find(rule, 1, bline, start_offset, &ignore, ret_stop);
 }
 

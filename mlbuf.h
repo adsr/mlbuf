@@ -15,14 +15,15 @@ typedef struct srule_s srule_t; // A style rule
 typedef struct srule_node_s srule_node_t; // A node in a list of style rules
 typedef struct sblock_s sblock_t; // A style of a particular character
 typedef void (*buffer_callback_t)(buffer_t* buffer, baction_t* action, void* udata);
+typedef ssize_t bint_t;
 
 // buffer_t
 struct buffer_s {
     bline_t* first_line;
     bline_t* last_line;
-    size_t byte_count;
-    size_t char_count;
-    size_t line_count;
+    bint_t byte_count;
+    bint_t char_count;
+    bint_t line_count;
     srule_node_t* single_srules;
     srule_node_t* multi_srules;
     baction_t* actions;
@@ -31,7 +32,7 @@ struct buffer_s {
     char* path;
     int is_unsaved;
     char *data;
-    size_t data_len;
+    bint_t data_len;
     int is_data_dirty;
     int ref_count;
     int tab_width;
@@ -46,16 +47,16 @@ struct buffer_s {
 struct bline_s {
     buffer_t* buffer;
     char* data;
-    size_t data_len;
-    size_t data_cap;
-    size_t line_index;
-    size_t char_count;
-    size_t char_vwidth;
-    size_t* char_vcol;
-    size_t* char_indexes;
-    size_t char_indexes_cap;
+    bint_t data_len;
+    bint_t data_cap;
+    bint_t line_index;
+    bint_t char_count;
+    bint_t char_vwidth;
+    bint_t* char_vcol;
+    bint_t* char_indexes;
+    bint_t char_indexes_cap;
     sblock_t* char_styles;
-    size_t char_styles_cap;
+    bint_t char_styles_cap;
     mark_t* marks;
     srule_t* bol_rule;
     srule_t* eol_rule;
@@ -68,16 +69,16 @@ struct baction_s {
     int type; // MLBUF_BACTION_TYPE_*
     buffer_t* buffer;
     bline_t* start_line;
-    size_t start_line_index;
-    size_t start_col;
+    bint_t start_line_index;
+    bint_t start_col;
     bline_t* maybe_end_line;
-    size_t maybe_end_line_index;
-    size_t maybe_end_col;
-    ssize_t byte_delta;
-    ssize_t char_delta;
-    ssize_t line_delta;
+    bint_t maybe_end_line_index;
+    bint_t maybe_end_col;
+    bint_t byte_delta;
+    bint_t char_delta;
+    bint_t line_delta;
     char* data;
-    size_t data_len;
+    bint_t data_len;
     baction_t* next;
     baction_t* prev;
 };
@@ -85,8 +86,8 @@ struct baction_s {
 // mark_t
 struct mark_s {
     bline_t* bline;
-    size_t col;
-    size_t target_col;
+    bint_t col;
+    bint_t target_col;
     char letter;
     mark_t* next;
     mark_t* prev;
@@ -117,19 +118,19 @@ struct srule_node_s {
 
 // buffer functions
 buffer_t* buffer_new();
-buffer_t* buffer_new_open(char* path, size_t path_len);
-mark_t* buffer_add_mark(buffer_t* self, bline_t* maybe_line, size_t maybe_col);
-int buffer_open(buffer_t* self, char* path, size_t path_len);
+buffer_t* buffer_new_open(char* path, bint_t path_len);
+mark_t* buffer_add_mark(buffer_t* self, bline_t* maybe_line, bint_t maybe_col);
+int buffer_open(buffer_t* self, char* path, bint_t path_len);
 int buffer_save(buffer_t* self);
-int buffer_save_as(buffer_t* self, char* path, size_t path_len);
-int buffer_get(buffer_t* self, char** ret_data, size_t* ret_data_len);
-int buffer_set(buffer_t* self, char* data, size_t data_len);
-int buffer_substr(buffer_t* self, bline_t* start_line, size_t start_col, bline_t* end_line, size_t end_col, char** ret_data, size_t* ret_data_len, size_t* ret_nchars);
-int buffer_insert(buffer_t* self, size_t offset, char* data, size_t data_len, size_t* ret_num_chars);
-int buffer_delete(buffer_t* self, size_t offset, size_t num_chars);
-int buffer_get_bline(buffer_t* self, size_t line_index, bline_t** ret_bline);
-int buffer_get_bline_col(buffer_t* self, size_t offset, bline_t** ret_bline, size_t* ret_col);
-int buffer_get_offset(buffer_t* self, bline_t* bline, size_t col, size_t* ret_offset);
+int buffer_save_as(buffer_t* self, char* path, bint_t path_len);
+int buffer_get(buffer_t* self, char** ret_data, bint_t* ret_data_len);
+int buffer_set(buffer_t* self, char* data, bint_t data_len);
+int buffer_substr(buffer_t* self, bline_t* start_line, bint_t start_col, bline_t* end_line, bint_t end_col, char** ret_data, bint_t* ret_data_len, bint_t* ret_nchars);
+int buffer_insert(buffer_t* self, bint_t offset, char* data, bint_t data_len, bint_t* ret_num_chars);
+int buffer_delete(buffer_t* self, bint_t offset, bint_t num_chars);
+int buffer_get_bline(buffer_t* self, bint_t line_index, bline_t** ret_bline);
+int buffer_get_bline_col(buffer_t* self, bint_t offset, bline_t** ret_bline, bint_t* ret_col);
+int buffer_get_offset(buffer_t* self, bline_t* bline, bint_t col, bint_t* ret_offset);
 int buffer_undo(buffer_t* self);
 int buffer_redo(buffer_t* self);
 int buffer_add_srule(buffer_t* self, srule_t* srule);
@@ -140,50 +141,50 @@ int buffer_debug_dump(buffer_t* self, FILE* stream);
 int buffer_destroy(buffer_t* self);
 
 // bline functions
-int bline_insert(bline_t* self, size_t col, char* data, size_t data_len, size_t* ret_num_chars);
-int bline_delete(bline_t* self, size_t col, size_t num_chars);
-int bline_get_col(bline_t* self, size_t index, size_t* ret_col);
+int bline_insert(bline_t* self, bint_t col, char* data, bint_t data_len, bint_t* ret_num_chars);
+int bline_delete(bline_t* self, bint_t col, bint_t num_chars);
+int bline_get_col(bline_t* self, bint_t index, bint_t* ret_col);
 
 // mark functions
 mark_t* mark_clone(mark_t* self);
-int mark_insert_before(mark_t* self, char* data, size_t data_len);
-int mark_insert_after(mark_t* self, char* data, size_t data_len);
-int mark_delete_before(mark_t* self, size_t num_chars);
-int mark_delete_after(mark_t* self, size_t num_chars);
-int mark_move_to(mark_t* self, size_t line_index, size_t col);
-int mark_move_by(mark_t* self, ssize_t char_delta);
-int mark_move_vert(mark_t* self, ssize_t line_delta);
+int mark_insert_before(mark_t* self, char* data, bint_t data_len);
+int mark_insert_after(mark_t* self, char* data, bint_t data_len);
+int mark_delete_before(mark_t* self, bint_t num_chars);
+int mark_delete_after(mark_t* self, bint_t num_chars);
+int mark_move_to(mark_t* self, bint_t line_index, bint_t col);
+int mark_move_by(mark_t* self, bint_t char_delta);
+int mark_move_vert(mark_t* self, bint_t line_delta);
 int mark_move_bol(mark_t* self);
 int mark_move_eol(mark_t* self);
-int mark_move_col(mark_t* self, size_t col);
+int mark_move_col(mark_t* self, bint_t col);
 int mark_move_beginning(mark_t* self);
 int mark_move_end(mark_t* self);
-int mark_move_offset(mark_t* self, size_t offset);
-int mark_find_next_str(mark_t* self, char* str, size_t str_len, bline_t** ret_line, size_t* ret_col);
-int mark_find_prev_str(mark_t* self, char* str, size_t str_len, bline_t** ret_line, size_t* ret_col);
-int mark_find_next_cre(mark_t* self, pcre* cre, bline_t** ret_line, size_t* ret_col);
-int mark_find_prev_cre(mark_t* self, pcre* cre, bline_t** ret_line, size_t* ret_col);
-int mark_find_next_re(mark_t* self, char* re, size_t re_len, bline_t** ret_line, size_t* ret_col);
-int mark_find_prev_re(mark_t* self, char* re, size_t re_len, bline_t** ret_line, size_t* ret_col);
-int mark_find_bracket_pair(mark_t* self, size_t max_chars, bline_t** ret_line, size_t* ret_col);
-int mark_move_next_str(mark_t* self, char* str, size_t str_len);
-int mark_move_prev_str(mark_t* self, char* str, size_t str_len);
+int mark_move_offset(mark_t* self, bint_t offset);
+int mark_find_next_str(mark_t* self, char* str, bint_t str_len, bline_t** ret_line, bint_t* ret_col);
+int mark_find_prev_str(mark_t* self, char* str, bint_t str_len, bline_t** ret_line, bint_t* ret_col);
+int mark_find_next_cre(mark_t* self, pcre* cre, bline_t** ret_line, bint_t* ret_col);
+int mark_find_prev_cre(mark_t* self, pcre* cre, bline_t** ret_line, bint_t* ret_col);
+int mark_find_next_re(mark_t* self, char* re, bint_t re_len, bline_t** ret_line, bint_t* ret_col);
+int mark_find_prev_re(mark_t* self, char* re, bint_t re_len, bline_t** ret_line, bint_t* ret_col);
+int mark_find_bracket_pair(mark_t* self, bint_t max_chars, bline_t** ret_line, bint_t* ret_col);
+int mark_move_next_str(mark_t* self, char* str, bint_t str_len);
+int mark_move_prev_str(mark_t* self, char* str, bint_t str_len);
 int mark_move_next_cre(mark_t* self, pcre* cre);
 int mark_move_prev_cre(mark_t* self, pcre* cre);
-int mark_move_next_re(mark_t* self, char* re, size_t re_len);
-int mark_move_prev_re(mark_t* self, char* re, size_t re_len);
-int mark_move_bracket_pair(mark_t* self, size_t max_chars);
-int mark_get_offset(mark_t* self, size_t* ret_offset);
+int mark_move_next_re(mark_t* self, char* re, bint_t re_len);
+int mark_move_prev_re(mark_t* self, char* re, bint_t re_len);
+int mark_move_bracket_pair(mark_t* self, bint_t max_chars);
+int mark_get_offset(mark_t* self, bint_t* ret_offset);
 int mark_delete_between_mark(mark_t* self, mark_t* other);
-int mark_get_between_mark(mark_t* self, mark_t* other, char** ret_str, size_t* ret_str_len);
+int mark_get_between_mark(mark_t* self, mark_t* other, char** ret_str, bint_t* ret_str_len);
 int mark_is_lt(mark_t* self, mark_t* other);
 int mark_is_gt(mark_t* self, mark_t* other);
 int mark_is_eq(mark_t* self, mark_t* other);
 int mark_swap_with_mark(mark_t* self, mark_t* other);
 
 // srule functions
-srule_t* srule_new_single(char* re, size_t re_len, uint16_t fg, uint16_t bg);
-srule_t* srule_new_multi(char* re, size_t re_len, char* re_end, size_t re_end_len, uint16_t fg, uint16_t bg);
+srule_t* srule_new_single(char* re, bint_t re_len, uint16_t fg, uint16_t bg);
+srule_t* srule_new_multi(char* re, bint_t re_len, char* re_end, bint_t re_end_len, uint16_t fg, uint16_t bg);
 srule_t* srule_new_range(mark_t* range_a, mark_t* range_b, uint16_t fg, uint16_t bg);
 int srule_destroy(srule_t* srule);
 

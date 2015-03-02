@@ -2,7 +2,7 @@
 
 MAIN("hello\nworld",
     char* data;
-    size_t data_len;
+    bint_t data_len;
     mark_move_end(cur);
     mark_delete_before(cur, 1);
     buffer_get(buf, &data, &data_len);

@@ -48,7 +48,7 @@ buffer_t* buffer_new() {
 }
 
 // Wrapper for buffer_new + buffer_open
-buffer_t* buffer_new_open(char* path, bint_t path_len) {
+buffer_t* buffer_new_open(char* path, int path_len) {
     buffer_t* self;
     int rc;
     self = buffer_new();
@@ -60,12 +60,17 @@ buffer_t* buffer_new_open(char* path, bint_t path_len) {
 }
 
 // Read buffer from path
-int buffer_open(buffer_t* self, char* opath, bint_t opath_len) {
+int buffer_open(buffer_t* self, char* opath, int opath_len) {
     char* path;
     int rc;
     int fd;
     struct stat st;
     char* buffer;
+
+    // Exit early if path is empty
+    if (!opath || opath_len < 1) {
+        return MLBUF_ERR;
+    }
 
     // Open file for reading
     path = strndup(opath, opath_len);
@@ -108,7 +113,7 @@ int buffer_save(buffer_t* self) {
 }
 
 // Write buffer to specified path
-int buffer_save_as(buffer_t* self, char* opath, bint_t opath_len) {
+int buffer_save_as(buffer_t* self, char* opath, int opath_len) {
     char* path;
     FILE* fp;
     char *data;

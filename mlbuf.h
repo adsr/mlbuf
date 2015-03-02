@@ -118,11 +118,11 @@ struct srule_node_s {
 
 // buffer functions
 buffer_t* buffer_new();
-buffer_t* buffer_new_open(char* path, bint_t path_len);
+buffer_t* buffer_new_open(char* path, int path_len);
 mark_t* buffer_add_mark(buffer_t* self, bline_t* maybe_line, bint_t maybe_col);
-int buffer_open(buffer_t* self, char* path, bint_t path_len);
+int buffer_open(buffer_t* self, char* path, int path_len);
 int buffer_save(buffer_t* self);
-int buffer_save_as(buffer_t* self, char* path, bint_t path_len);
+int buffer_save_as(buffer_t* self, char* path, int path_len);
 int buffer_get(buffer_t* self, char** ret_data, bint_t* ret_data_len);
 int buffer_set(buffer_t* self, char* data, bint_t data_len);
 int buffer_substr(buffer_t* self, bline_t* start_line, bint_t start_col, bline_t* end_line, bint_t end_col, char** ret_data, bint_t* ret_data_len, bint_t* ret_nchars);
@@ -230,5 +230,7 @@ int utf8_unicode_to_char(char *out, uint32_t c);
         fflush(stderr); \
     } \
 } while (0)
+
+#define MLBUF_MAKE_GT_EQ0(v) if ((v) < 0) v = 0
 
 #endif

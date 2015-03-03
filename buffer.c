@@ -403,6 +403,7 @@ int buffer_get_bline(buffer_t* self, bint_t line_index, bline_t** ret_bline) {
             return MLBUF_OK;
         }
     }
+    *ret_bline = self->last_line;
     return MLBUF_ERR;
 }
 

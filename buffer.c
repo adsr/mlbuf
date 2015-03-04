@@ -967,14 +967,19 @@ static int _buffer_bline_apply_style_single(srule_t* srule, bline_t* bline) {
     bint_t stop;
     bint_t look_offset;
     look_offset = 0;
-    while (look_offset < bline->char_count) {
+
+    while (look_offset < bline->data_len) {
         if ((rc = pcre_exec(srule->cre, NULL, bline->data, bline->data_len, look_offset, 0, substrs, 3)) >= 0) {
+            if (substrs[1] < 0) {
+                // substrs[0..1] can be -1 sometimes, See http://pcre.org/pcre.txt
+                break;
+            }
             start = _buffer_bline_index_to_col(bline, substrs[0]);
             stop = _buffer_bline_index_to_col(bline, substrs[1]);
             for (; start < stop; start++) {
                 bline->char_styles[start] = srule->style;
             }
-            look_offset = stop;
+            look_offset = MLBUF_MAX(substrs[1], look_offset + 1);
         } else {
             break;
         }
@@ -1263,8 +1268,8 @@ static int _buffer_bline_count_chars(bline_t* bline) {
             char_w = wcwidth(ch);
         }
         // Let null and non-printable chars occupy 1 column
-        if (char_w < 0) char_w = 1;
-        if (char_len < 0) char_len = 1;
+        if (char_w < 1) char_w = 1;
+        if (char_len < 1) char_len = 1;
         bline->char_indexes[bline->char_count] = (bint_t)(c - bline->data);
         bline->char_vcol[bline->char_count] = bline->char_vwidth;
         bline->char_count += 1;

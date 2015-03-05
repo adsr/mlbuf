@@ -166,6 +166,7 @@ int buffer_destroy(buffer_t* self) {
         DL_DELETE(self->actions, action);
         _baction_destroy(action);
     }
+    free(self);
     return MLBUF_OK;
 }
 

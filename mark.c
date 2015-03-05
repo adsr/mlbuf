@@ -471,7 +471,8 @@ static char* mark_find_prev_str_matchfn(char* haystack, bint_t haystack_len, bin
 static char* mark_find_next_cre_matchfn(char* haystack, bint_t haystack_len, bint_t max_offset, void* cre, void* unused, bint_t* ret_needle_len) {
     int rc;
     int substrs[3];
-    if ((rc = pcre_exec((pcre*)cre, NULL, haystack, haystack_len, 0, 0, substrs, 3)) >= 0) {
+    MLBUF_INIT_PCRE_EXTRA(pcre_extra);
+    if ((rc = pcre_exec((pcre*)cre, &pcre_extra, haystack, haystack_len, 0, 0, substrs, 3)) >= 0) {
         if (ret_needle_len) *ret_needle_len = (bint_t)(substrs[1] - substrs[0]);
         return haystack + substrs[0];
     }

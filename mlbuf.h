@@ -54,6 +54,7 @@ struct bline_s {
     bint_t char_vwidth;
     bint_t* char_vcol;
     bint_t* char_indexes;
+    bint_t* index_cols;
     bint_t char_indexes_cap;
     sblock_t* char_styles;
     bint_t char_styles_cap;
@@ -190,7 +191,7 @@ int srule_destroy(srule_t* srule);
 
 // utf8 functions
 int utf8_char_length(char c);
-int utf8_char_to_unicode(uint32_t *out, const char *c);
+int utf8_char_to_unicode(uint32_t *out, const char *c, const char *stop);
 int utf8_unicode_to_char(char *out, uint32_t c);
 
 // Macros
@@ -232,5 +233,8 @@ int utf8_unicode_to_char(char *out, uint32_t c);
 } while (0)
 
 #define MLBUF_MAKE_GT_EQ0(v) if ((v) < 0) v = 0
+
+#define MLBUF_INIT_PCRE_EXTRA(n) \
+    pcre_extra n = { .flags = PCRE_EXTRA_MATCH_LIMIT_RECURSION, .match_limit_recursion = 256 }
 
 #endif

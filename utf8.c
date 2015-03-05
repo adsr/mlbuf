@@ -28,7 +28,7 @@ int utf8_char_length(char c) {
     return utf8_length[(unsigned char)c];
 }
 
-int utf8_char_to_unicode(uint32_t *out, const char *c) {
+int utf8_char_to_unicode(uint32_t *out, const char *c, const char *stop) {
     if (*c == 0)
         return -1;
 
@@ -37,6 +37,10 @@ int utf8_char_to_unicode(uint32_t *out, const char *c) {
     unsigned char mask = utf8_mask[len-1];
     uint32_t result = c[0] & mask;
     for (i = 1; i < len; ++i) {
+        if (stop && c + i >= stop) {
+            len -= (len - i);
+            break;
+        }
         result <<= 6;
         result |= c[i] & 0x3f;
     }

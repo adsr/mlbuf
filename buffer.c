@@ -410,7 +410,7 @@ int buffer_get_bline(buffer_t* self, bint_t line_index, bline_t** ret_bline) {
 // Return a line and col for the given offset
 int buffer_get_bline_col(buffer_t* self, bint_t offset, bline_t** ret_bline, bint_t* ret_col) {
     bline_t* tmp_line;
-    bline_t* good_line;
+    bline_t* good_line = NULL;
     bint_t remaining_chars;
     MLBUF_MAKE_GT_EQ0(offset);
 
@@ -966,10 +966,11 @@ static int _buffer_bline_apply_style_single(srule_t* srule, bline_t* bline) {
     bint_t start;
     bint_t stop;
     bint_t look_offset;
+    MLBUF_INIT_PCRE_EXTRA(pcre_extra);
     look_offset = 0;
 
     while (look_offset < bline->data_len) {
-        if ((rc = pcre_exec(srule->cre, NULL, bline->data, bline->data_len, look_offset, 0, substrs, 3)) >= 0) {
+        if ((rc = pcre_exec(srule->cre, &pcre_extra, bline->data, bline->data_len, look_offset, 0, substrs, 3)) >= 0) {
             if (substrs[1] < 0) {
                 // substrs[0..1] can be -1 sometimes, See http://pcre.org/pcre.txt
                 break;
@@ -1050,6 +1051,7 @@ static int _buffer_bline_free(bline_t* bline, bline_t* maybe_mark_line, bint_t c
     mark_t* mark_tmp;
     if (bline->data) free(bline->data);
     if (bline->char_vcol) free(bline->char_vcol);
+    if (bline->index_cols) free(bline->index_cols);
     if (bline->char_indexes) free(bline->char_indexes);
     if (bline->char_styles) free(bline->char_styles);
     if (bline->marks) {
@@ -1218,16 +1220,12 @@ static bint_t _buffer_bline_col_to_index(bline_t* bline, bint_t col) {
 }
 
 static bint_t _buffer_bline_index_to_col(bline_t* bline, bint_t index) {
-    bint_t col;
-    if (!bline->char_indexes) {
+    if (!bline->index_cols || index < 1) {
         return 0;
+    } else if (index >= bline->data_len) {
+        return bline->char_count;
     }
-    for (col = 0; col < bline->char_count; col++) {
-        if (bline->char_indexes[col] >= index) {
-            return col;
-        }
-    }
-    return bline->char_count;
+    return bline->index_cols[index];
 }
 
 static int _buffer_bline_count_chars(bline_t* bline) {
@@ -1235,6 +1233,7 @@ static int _buffer_bline_count_chars(bline_t* bline) {
     int char_len;
     uint32_t ch;
     int char_w;
+    bint_t i;
 
     // Return early if there is no data
     if (bline->data_len < 1) {
@@ -1248,10 +1247,12 @@ static int _buffer_bline_count_chars(bline_t* bline) {
     if (!bline->char_indexes) {
         bline->char_indexes = malloc(bline->data_len * sizeof(bint_t));
         bline->char_vcol = malloc(bline->data_len * sizeof(bint_t));
+        bline->index_cols = malloc(bline->data_len * sizeof(bint_t));
         bline->char_indexes_cap = bline->data_len;
     } else if (bline->data_len > bline->char_indexes_cap) {
         bline->char_indexes = realloc(bline->char_indexes, bline->data_len * sizeof(bint_t));
         bline->char_vcol = realloc(bline->char_vcol, bline->data_len * sizeof(bint_t));
+        bline->index_cols = realloc(bline->index_cols, bline->data_len * sizeof(bint_t));
         bline->char_indexes_cap = bline->data_len;
     }
 
@@ -1260,7 +1261,7 @@ static int _buffer_bline_count_chars(bline_t* bline) {
     bline->char_vwidth = 0;
     for (c = bline->data; c < MLBUF_BLINE_DATA_STOP(bline); ) {
         ch = 0;
-        char_len = utf8_char_to_unicode(&ch, c);
+        char_len = utf8_char_to_unicode(&ch, c, MLBUF_BLINE_DATA_STOP(bline));
         if (ch == '\t') {
             // Special case for tabs
             char_w = bline->buffer->tab_width - (bline->char_vwidth % bline->buffer->tab_width);
@@ -1272,6 +1273,9 @@ static int _buffer_bline_count_chars(bline_t* bline) {
         if (char_len < 1) char_len = 1;
         bline->char_indexes[bline->char_count] = (bint_t)(c - bline->data);
         bline->char_vcol[bline->char_count] = bline->char_vwidth;
+        for (i = 0; i < char_len; i++) {
+            bline->index_cols[(c - bline->data) + i] = bline->char_count;
+        }
         bline->char_count += 1;
         bline->char_vwidth += char_w;
         c += char_len;
@@ -1363,6 +1367,7 @@ static int _srule_multi_find(srule_t* rule, int find_end, bline_t* bline, bint_t
     int substrs[3];
     bint_t start_index;
     mark_t* mark;
+    MLBUF_INIT_PCRE_EXTRA(pcre_extra);
 
     if (rule->type == MLBUF_SRULE_TYPE_RANGE) {
         mark = mark_is_gt(rule->range_a, rule->range_b)
@@ -1379,7 +1384,7 @@ static int _srule_multi_find(srule_t* rule, int find_end, bline_t* bline, bint_t
     // MLBUF_SRULE_TYPE_MULTI
     cre = find_end ? rule->cre_end : rule->cre;
     start_index = _buffer_bline_col_to_index(bline, start_offset);
-    if ((rc = pcre_exec(cre, NULL, bline->data, bline->data_len, start_index, 0, substrs, 3)) >= 0) {
+    if ((rc = pcre_exec(cre, &pcre_extra, bline->data, bline->data_len, start_index, 0, substrs, 3)) >= 0) {
         *ret_start = _buffer_bline_index_to_col(bline, substrs[0]);
         *ret_stop = _buffer_bline_index_to_col(bline, substrs[1]);
         return 1;

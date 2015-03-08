@@ -234,7 +234,7 @@ int buffer_set(buffer_t* self, char* data, bint_t data_len) {
 }
 
 // Insert data into buffer
-int buffer_insert(buffer_t* self, bint_t offset, char* data, bint_t data_len, bint_t* ret_num_chars) {
+int buffer_insert(buffer_t* self, bint_t offset, char* data, bint_t data_len, bint_t* optret_num_chars) {
     int rc;
     bline_t* start_line;
     bint_t start_col;
@@ -304,7 +304,7 @@ int buffer_insert(buffer_t* self, bint_t offset, char* data, bint_t data_len, bi
     action->data = ins_data;
     action->data_len = ins_data_len;
     _buffer_update(self, action);
-    if (ret_num_chars) *ret_num_chars = ins_data_nchars;
+    if (optret_num_chars) *optret_num_chars = ins_data_nchars;
 
     return MLBUF_OK;
 }

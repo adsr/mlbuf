@@ -213,7 +213,7 @@ int mark_find_bracket_pair(mark_t* self, bint_t max_chars, bline_t** ret_line, b
         return MLBUF_ERR;
     }
     // Set brkt to char under mark
-    brkt = *(self->bline->data + self->bline->char_indexes[self->col]);
+    brkt = *(self->bline->data + self->bline->chars[self->col].index);
     // Find targ matching bracket char
     targ = 0;
     for (i = 0; i < 8; i++) {
@@ -240,7 +240,7 @@ int mark_find_bracket_pair(mark_t* self, bint_t max_chars, bline_t** ret_line, b
     nchars = 0;
     while (cur_line) {
         for (; col >= 0 && col < cur_line->char_count; col += dir) {
-            cur = *(cur_line->data + cur_line->char_indexes[col]);
+            cur = *(cur_line->data + cur_line->chars[col].index);
             if (cur == targ) {
                 if (nest == 0) {
                     // Match!
@@ -379,7 +379,7 @@ static int mark_find_match(mark_t* self, mark_find_match_fn matchfn, void* u1, v
         search_len = search_line->data_len;
         max_offset = self->col - 1;
     } else {
-        search_start = self->col + 1 < search_line->char_count ? search_line->char_indexes[self->col + 1] : search_line->data_len;
+        search_start = self->col + 1 < search_line->char_count ? search_line->chars[self->col + 1].index : search_line->data_len;
         search_len = search_line->data_len - search_start;
         max_offset = search_line->char_count - 1;
     }

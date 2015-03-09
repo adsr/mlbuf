@@ -14,7 +14,7 @@ MAIN("he\tllo\t\t",
     ASSERT("count4", 8, buf->first_line->char_count);
     ASSERT("width4", 12, buf->first_line->char_vwidth);
     for (i = 0; i < buf->first_line->char_count; i++) {
-        ASSERT("vcol4", char_vcols_4[i], buf->first_line->char_vcol[i]);
+        ASSERT("vcol4", char_vcols_4[i], buf->first_line->chars[i].vcol);
     }
 
     buffer_set_tab_width(buf, 2);
@@ -23,7 +23,7 @@ MAIN("he\tllo\t\t",
     ASSERT("count2a", 8, buf->first_line->char_count);
     ASSERT("width2a", 10, buf->first_line->char_vwidth);
     for (i = 0; i < buf->first_line->char_count; i++) {
-        ASSERT("vcol2a", char_vcols_2a[i], buf->first_line->char_vcol[i]);
+        ASSERT("vcol2a", char_vcols_2a[i], buf->first_line->chars[i].vcol);
     }
 
     bline_insert(buf->first_line, 4, "\t", 1, NULL);
@@ -32,6 +32,6 @@ MAIN("he\tllo\t\t",
     ASSERT("count2b", 9, buf->first_line->char_count);
     ASSERT("width2b", 12, buf->first_line->char_vwidth);
     for (i = 0; i < buf->first_line->char_count; i++) {
-        ASSERT("vcol2b", char_vcols_2b[i], buf->first_line->char_vcol[i]);
+        ASSERT("vcol2b", char_vcols_2b[i], buf->first_line->chars[i].vcol);
     }
 )

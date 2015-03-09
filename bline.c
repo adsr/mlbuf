@@ -26,10 +26,10 @@ int bline_get_col(bline_t* self, bint_t index, bint_t* ret_col) {
         return MLBUF_OK;
     }
     for (col = 1; col < self->char_count; col++) {
-        if (self->char_indexes[col] > index) {
+        if (self->chars[col].index > index) {
             *ret_col = col - 1;
             return MLBUF_OK;
-        } else if (self->char_indexes[col] == index) {
+        } else if (self->chars[col].index == index) {
             *ret_col = col;
             return MLBUF_OK;
         }

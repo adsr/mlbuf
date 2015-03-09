@@ -9,6 +9,7 @@
 // Typedefs
 typedef struct buffer_s buffer_t; // A buffer of text (stored as a linked list of blines)
 typedef struct bline_s bline_t; // A line in a buffer
+typedef struct bline_char_s bline_char_t; // Metadata about a character in a bline
 typedef struct baction_s baction_t; // An insert or delete action (used for undo)
 typedef struct mark_s mark_t; // A mark in a buffer
 typedef struct srule_s srule_t; // A style rule
@@ -48,14 +49,13 @@ struct bline_s {
     buffer_t* buffer;
     char* data;
     bint_t data_len;
+    bint_t* data_vcols;
     bint_t data_cap;
     bint_t line_index;
     bint_t char_count;
     bint_t char_vwidth;
-    bint_t* char_vcol;
-    bint_t* char_indexes;
-    bint_t* index_cols;
-    bint_t char_indexes_cap;
+    bline_char_t* chars;
+    bint_t chars_cap;
     sblock_t* char_styles;
     bint_t char_styles_cap;
     mark_t* marks;
@@ -63,6 +63,14 @@ struct bline_s {
     srule_t* eol_rule;
     bline_t* next;
     bline_t* prev;
+};
+
+// bline_char_t
+struct bline_char_s {
+    uint32_t ch;
+    int len;
+    bint_t index;
+    bint_t vcol;
 };
 
 // baction_t
@@ -193,6 +201,9 @@ int srule_destroy(srule_t* srule);
 int utf8_char_length(char c);
 int utf8_char_to_unicode(uint32_t *out, const char *c, const char *stop);
 int utf8_unicode_to_char(char *out, uint32_t c);
+
+// util functions
+void* recalloc(void* ptr, size_t orig_num, size_t new_num, size_t el_size);
 
 // Macros
 #define MLBUF_DEBUG 1

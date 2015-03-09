@@ -565,14 +565,14 @@ int buffer_debug_dump(buffer_t* self, FILE* stream) {
         fprintf(stream, "    next=%ld\n", bline_tmp->next ? bline_tmp->next->line_index : -1);
         fprintf(stream, "    prev=%ld\n", bline_tmp->prev ? bline_tmp->prev->line_index : -1);
         fprintf(stream, "    data_cap=%lu\n", bline_tmp->data_cap);
-        fprintf(stream, "    char_indexes+pos=");
-        if (bline_tmp->char_indexes) {
+        fprintf(stream, "    char_indexes+vcol=");
+        if (bline_tmp->chars) {
             for (j = 0; j < bline_tmp->char_count; j++) {
-                fprintf(stream, "%lu@%lu ", bline_tmp->char_indexes[j], bline_tmp->char_vcol[j]);
+                fprintf(stream, "%lu@%lu ", bline_tmp->chars[j].index, bline_tmp->chars[j].vcol);
             }
         }
-        fprintf(stream, "\n    char_styles_cap=%lu\n", bline_tmp->char_styles_cap);
-        fprintf(stream, "    char_indexes_cap=%lu\n", bline_tmp->char_indexes_cap);
+        fprintf(stream, "\n    chars_cap=%lu\n", bline_tmp->chars_cap);
+        fprintf(stream, "    char_styles_cap=%lu\n", bline_tmp->char_styles_cap);
     }
     fprintf(stream, "single_srules:\n");
     i = 0; DL_FOREACH(self->single_srules, srule_tmp) {
@@ -1051,9 +1051,8 @@ static int _buffer_bline_free(bline_t* bline, bline_t* maybe_mark_line, bint_t c
     mark_t* mark;
     mark_t* mark_tmp;
     if (bline->data) free(bline->data);
-    if (bline->char_vcol) free(bline->char_vcol);
-    if (bline->index_cols) free(bline->index_cols);
-    if (bline->char_indexes) free(bline->char_indexes);
+    if (bline->data_vcols) free(bline->data_vcols);
+    if (bline->chars) free(bline->chars);
     if (bline->char_styles) free(bline->char_styles);
     if (bline->marks) {
         DL_FOREACH_SAFE(bline->marks, mark, mark_tmp) {
@@ -1209,24 +1208,24 @@ static bint_t _buffer_bline_delete(bline_t* bline, bint_t col, bint_t num_chars)
 
 static bint_t _buffer_bline_col_to_index(bline_t* bline, bint_t col) {
     bint_t index;
-    if (!bline->char_indexes) {
+    if (!bline->chars) {
         return 0;
     }
     if (col >= bline->char_count) {
         index = bline->data_len;
     } else {
-        index = bline->char_indexes[col];
+        index = bline->chars[col].index;
     }
     return index;
 }
 
 static bint_t _buffer_bline_index_to_col(bline_t* bline, bint_t index) {
-    if (!bline->index_cols || index < 1) {
+    if (!bline->data_vcols || index < 1) {
         return 0;
     } else if (index >= bline->data_len) {
         return bline->char_count;
     }
-    return bline->index_cols[index];
+    return bline->data_vcols[index];
 }
 
 static int _buffer_bline_count_chars(bline_t* bline) {
@@ -1243,18 +1242,16 @@ static int _buffer_bline_count_chars(bline_t* bline) {
         return MLBUF_OK;
     }
 
-    // Ensure space for char_indexes and char_vcol
+    // Ensure space for chars
     // It should have data_len elements at most
-    if (!bline->char_indexes) {
-        bline->char_indexes = malloc(bline->data_len * sizeof(bint_t));
-        bline->char_vcol = malloc(bline->data_len * sizeof(bint_t));
-        bline->index_cols = malloc(bline->data_len * sizeof(bint_t));
-        bline->char_indexes_cap = bline->data_len;
-    } else if (bline->data_len > bline->char_indexes_cap) {
-        bline->char_indexes = realloc(bline->char_indexes, bline->data_len * sizeof(bint_t));
-        bline->char_vcol = realloc(bline->char_vcol, bline->data_len * sizeof(bint_t));
-        bline->index_cols = realloc(bline->index_cols, bline->data_len * sizeof(bint_t));
-        bline->char_indexes_cap = bline->data_len;
+    if (!bline->chars) {
+        bline->chars = calloc(bline->data_len, sizeof(bline_char_t));
+        bline->data_vcols = malloc(bline->data_len * sizeof(bint_t));
+        bline->chars_cap = bline->data_len;
+    } else if (bline->data_len > bline->chars_cap) {
+        bline->chars = recalloc(bline->chars, bline->chars_cap, bline->data_len, sizeof(bline_char_t));
+        bline->data_vcols = realloc(bline->data_vcols, bline->data_len * sizeof(bint_t));
+        bline->chars_cap = bline->data_len;
     }
 
     // Count utf8 chars, keep track of byte indexes and char vwidths
@@ -1272,10 +1269,12 @@ static int _buffer_bline_count_chars(bline_t* bline) {
         // Let null and non-printable chars occupy 1 column
         if (char_w < 1) char_w = 1;
         if (char_len < 1) char_len = 1;
-        bline->char_indexes[bline->char_count] = (bint_t)(c - bline->data);
-        bline->char_vcol[bline->char_count] = bline->char_vwidth;
-        for (i = 0; i < char_len; i++) {
-            bline->index_cols[(c - bline->data) + i] = bline->char_count;
+        bline->chars[bline->char_count].ch = ch;
+        bline->chars[bline->char_count].len = char_len;
+        bline->chars[bline->char_count].index = (bint_t)(c - bline->data);
+        bline->chars[bline->char_count].vcol = bline->char_vwidth;
+        for (i = 0; i < char_len; i++) if ((c - bline->data) + i < bline->data_len) {
+            bline->data_vcols[(c - bline->data) + i] = bline->char_count;
         }
         bline->char_count += 1;
         bline->char_vwidth += char_w;
@@ -1288,8 +1287,7 @@ static int _buffer_bline_count_chars(bline_t* bline) {
             bline->char_styles = calloc(bline->char_count, sizeof(sblock_t));
             bline->char_styles_cap = bline->char_count;
         } else if (bline->char_count > bline->char_styles_cap) {
-            bline->char_styles = realloc(bline->char_styles, bline->char_count * sizeof(sblock_t));
-            memset(bline->char_styles + bline->char_styles_cap, 0, (bline->char_count - bline->char_styles_cap) * sizeof(sblock_t));
+            bline->char_styles = recalloc(bline->char_styles, bline->char_styles_cap, bline->char_count, sizeof(sblock_t));
             bline->char_styles_cap = bline->char_count;
         }
     }

@@ -15,7 +15,7 @@ static int _buffer_baction_do(buffer_t* self, bline_t* bline, baction_t* action,
 static int _buffer_update(buffer_t* self, baction_t* action);
 static int _buffer_truncate_undo_stack(buffer_t* self, baction_t* action_from);
 static int _buffer_add_to_undo_stack(buffer_t* self, baction_t* action);
-static int _buffer_apply_styles(bline_t* start_line, bint_t line_delta);
+static int _buffer_apply_styles(buffer_t* self, bline_t* start_line, bint_t line_delta);
 static int _buffer_apply_styles_singles(bline_t* start_line, bint_t min_nlines);
 static int _buffer_apply_styles_multis(bline_t* start_line, bint_t min_nlines);
 static int _buffer_bline_apply_style_single(srule_t* srule, bline_t* bline);
@@ -463,7 +463,7 @@ int buffer_add_srule(buffer_t* self, srule_t* srule) {
     } else {
         DL_APPEND(self->multi_srules, node);
     }
-    return _buffer_apply_styles(self->first_line, self->line_count - 1);
+    return _buffer_apply_styles(self, self->first_line, self->line_count - 1);
 }
 
 // Remove a style rule from the buffer
@@ -487,7 +487,7 @@ int buffer_remove_srule(buffer_t* self, srule_t* srule) {
         }
     }
     if (!found) return MLBUF_ERR;
-    return _buffer_apply_styles(self->first_line, self->line_count - 1);
+    return _buffer_apply_styles(self, self->first_line, self->line_count - 1);
 }
 
 // Set callback to cb. Pass in NULL to unset callback.
@@ -746,6 +746,17 @@ int buffer_redo(buffer_t* self) {
     return rc;
 }
 
+// Toggle is_style_disabled
+int buffer_set_styles_enabled(buffer_t* self, int is_enabled) {
+    if (!self->is_style_disabled && !is_enabled) {
+        self->is_style_disabled = 1;
+    } else if (self->is_style_disabled && is_enabled) {
+        self->is_style_disabled = 0;
+        _buffer_apply_styles(self, self->first_line, self->line_count);
+    }
+    return MLBUF_OK;
+}
+
 static int _buffer_baction_do(buffer_t* self, bline_t* bline, baction_t* action, int is_redo, bint_t* opt_repeat_offset) {
     int rc;
     bint_t col;
@@ -788,7 +799,7 @@ static int _buffer_update(buffer_t* self, baction_t* action) {
     self->last_line = last_line ? last_line : action->start_line;
 
     // Restyle from start_line
-    _buffer_apply_styles(action->start_line, action->line_delta);
+    _buffer_apply_styles(self, action->start_line, action->line_delta);
 
     // Handle undo stack
     if (self->_is_in_undo) {
@@ -841,8 +852,12 @@ static int _buffer_add_to_undo_stack(buffer_t* self, baction_t* action) {
     return MLBUF_OK;
 }
 
-static int _buffer_apply_styles(bline_t* start_line, bint_t line_delta) {
+static int _buffer_apply_styles(buffer_t* self, bline_t* start_line, bint_t line_delta) {
     bint_t min_nlines;
+
+    if (self->is_style_disabled) {
+        return MLBUF_OK;
+    }
 
     // min_nlines, minimum number of lines to style
     //     line_delta  < 0: 2 (start_line + 1)

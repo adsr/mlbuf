@@ -40,6 +40,7 @@ struct buffer_s {
     buffer_callback_t callback;
     void* callback_udata;
     int is_in_callback;
+    int is_style_disabled;
     char _mark_counter;
     int _is_in_undo;
 };
@@ -146,6 +147,7 @@ int buffer_add_srule(buffer_t* self, srule_t* srule);
 int buffer_remove_srule(buffer_t* self, srule_t* srule);
 int buffer_set_callback(buffer_t* self, buffer_callback_t cb, void* udata);
 int buffer_set_tab_width(buffer_t* self, int tab_width);
+int buffer_set_styles_enabled(buffer_t* self, int is_enabled);
 int buffer_debug_dump(buffer_t* self, FILE* stream);
 int buffer_destroy(buffer_t* self);
 

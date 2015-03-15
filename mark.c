@@ -3,14 +3,14 @@
 #include <pcre.h>
 #include "mlbuf.h"
 
-typedef char* (*mark_find_match_fn)(char* haystack, bint_t haystack_len, bint_t max_offset, void* u1, void* u2, bint_t* ret_match_len);
+typedef char* (*mark_find_match_fn)(char* haystack, bint_t haystack_len, bint_t look_offset, bint_t max_offset, void* u1, void* u2, bint_t* ret_match_len);
 static int mark_find_match(mark_t* self, mark_find_match_fn matchfn, void* u1, void* u2, int reverse, bline_t** ret_line, bint_t* ret_col);
-static char* mark_find_match_prev(char* haystack, bint_t haystack_len, bint_t max_offset, mark_find_match_fn matchfn, void* u1, void* u2);
 static int mark_find_re(mark_t* self, char* re, bint_t re_len, int reverse, bline_t** ret_line, bint_t* ret_col);
-static char* mark_find_next_str_matchfn(char* haystack, bint_t haystack_len, bint_t max_offset, void* needle, void* needle_len, bint_t* ret_needle_len);
-static char* mark_find_prev_str_matchfn(char* haystack, bint_t haystack_len, bint_t max_offset, void* needle, void* needle_len, bint_t* ret_needle_len);
-static char* mark_find_next_cre_matchfn(char* haystack, bint_t haystack_len, bint_t max_offset, void* cre, void* unused, bint_t* ret_needle_len);
-static char* mark_find_prev_cre_matchfn(char* haystack, bint_t haystack_len, bint_t max_offset, void* cre, void* unused, bint_t* ret_needle_len);
+static char* mark_find_match_prev(char* haystack, bint_t haystack_len, bint_t look_offset, bint_t max_offset, mark_find_match_fn matchfn, void* u1, void* u2);
+static char* mark_find_next_str_matchfn(char* haystack, bint_t haystack_len, bint_t look_offset, bint_t max_offset, void* needle, void* needle_len, bint_t* ret_needle_len);
+static char* mark_find_prev_str_matchfn(char* haystack, bint_t haystack_len, bint_t look_offset, bint_t max_offset, void* needle, void* needle_len, bint_t* ret_needle_len);
+static char* mark_find_next_cre_matchfn(char* haystack, bint_t haystack_len, bint_t look_offset, bint_t max_offset, void* cre, void* unused, bint_t* ret_needle_len);
+static char* mark_find_prev_cre_matchfn(char* haystack, bint_t haystack_len, bint_t look_offset, bint_t max_offset, void* cre, void* unused, bint_t* ret_needle_len);
 
 // Return a clone (same position) of an existing mark
 mark_t* mark_clone(mark_t* self) {
@@ -368,34 +368,29 @@ int mark_move_bracket_pair(mark_t* self, bint_t max_chars) {
 static int mark_find_match(mark_t* self, mark_find_match_fn matchfn, void* u1, void* u2, int reverse, bline_t** ret_line, bint_t* ret_col) {
     bline_t* search_line;
     char* match;
-    bint_t search_start;
-    bint_t search_len;
+    bint_t look_offset;
     bint_t match_col;
     bint_t max_offset;
     search_line = self->bline;
     if (reverse) {
-        search_start = 0;
-        search_len = search_line->data_len;
-        max_offset = self->col - 1;
+        look_offset = 0;
+        max_offset = self->col < 1 ? 0 : search_line->chars[self->col - 1].index;
     } else {
-        search_start = self->col + 1 < search_line->char_count ? search_line->chars[self->col + 1].index : search_line->data_len;
-        search_len = search_line->data_len - search_start;
-        max_offset = search_line->char_count - 1;
+        look_offset = self->col + 1 < search_line->char_count ? search_line->chars[self->col + 1].index : search_line->data_len;
+        max_offset = search_line->data_len - 1;
     }
     while (search_line) {
-        if (search_line->char_count > 0 && search_len > 0) {
-            match = matchfn(search_line->data + search_start, search_len, max_offset, u1, u2, NULL);
-            if (match != NULL) {
-                bline_get_col(search_line, (bint_t)(match - search_line->data), &match_col);
-                *ret_line = search_line;
-                *ret_col = match_col;
-                return MLBUF_OK;
-            }
+        match = matchfn(search_line->data, search_line->data_len, look_offset, max_offset, u1, u2, NULL);
+        if (match != NULL) {
+            bline_get_col(search_line, (bint_t)(match - search_line->data), &match_col);
+            *ret_line = search_line;
+            *ret_col = match_col;
+            return MLBUF_OK;
         }
         search_line = reverse ? search_line->prev : search_line->next;
         if (search_line) {
-            search_start = 0;
-            search_len = search_line->data_len;
+            look_offset = 0;
+            max_offset = search_line->data_len - 1;
         }
     }
     *ret_line = NULL;
@@ -403,32 +398,27 @@ static int mark_find_match(mark_t* self, mark_find_match_fn matchfn, void* u1, v
 }
 
 // Return the last occurrence of a match given a forward-searching matchfn
-static char* mark_find_match_prev(char* haystack, bint_t haystack_len, bint_t max_offset, mark_find_match_fn matchfn, void* u1, void* u2) {
-    char* ohaystack;
+static char* mark_find_match_prev(char* haystack, bint_t haystack_len, bint_t look_offset, bint_t max_offset, mark_find_match_fn matchfn, void* u1, void* u2) {
     char* match;
     char* last_match;
-    bint_t next_offset;
     bint_t match_len;
-    ohaystack = haystack;
     last_match = NULL;
     while (1) {
-        match = matchfn(haystack, haystack_len, max_offset, u1, u2, &match_len);
+        match = matchfn(haystack, haystack_len, look_offset, max_offset, u1, u2, &match_len);
         if (match == NULL) {
             return last_match;
         }
-        if (match - ohaystack > max_offset) {
+        if (match - haystack > max_offset) {
             return last_match;
         }
         // Override match_len to 1. Reasoning: If we have a haystack like
         // 'banana' and our re is 'ana', using the actual match_len for the
         // next search offset would skip the 2nd 'ana' match.
         match_len = 1;
-        next_offset = (bint_t)(match - haystack) + match_len;
-        if (next_offset + match_len > haystack_len) {
+        look_offset = (bint_t)(match - haystack) + match_len;
+        if (look_offset + match_len > haystack_len) {
             return match;
         }
-        haystack = match + match_len;
-        haystack_len -= next_offset;
         last_match = match;
     }
 }
@@ -458,26 +448,27 @@ static int mark_find_re(mark_t* self, char* re, bint_t re_len, int reverse, blin
     return rc;
 }
 
-static char* mark_find_next_str_matchfn(char* haystack, bint_t haystack_len, bint_t max_offset, void* needle, void* needle_len, bint_t* ret_needle_len) {
+static char* mark_find_next_str_matchfn(char* haystack, bint_t haystack_len, bint_t look_offset, bint_t max_offset, void* needle, void* needle_len, bint_t* ret_needle_len) {
     if (ret_needle_len) *ret_needle_len = *((bint_t*)needle_len);
-    return memmem(haystack, haystack_len, needle, *((bint_t*)needle_len));
+    if (look_offset >= haystack_len) return NULL;
+    return memmem(haystack + look_offset, haystack_len - look_offset, needle, *((bint_t*)needle_len));
 }
 
-static char* mark_find_prev_str_matchfn(char* haystack, bint_t haystack_len, bint_t max_offset, void* needle, void* needle_len, bint_t* ret_needle_len) {
-    return mark_find_match_prev(haystack, haystack_len, max_offset, mark_find_next_str_matchfn, needle, needle_len);
+static char* mark_find_prev_str_matchfn(char* haystack, bint_t haystack_len, bint_t look_offset, bint_t max_offset, void* needle, void* needle_len, bint_t* ret_needle_len) {
+    return mark_find_match_prev(haystack, haystack_len, look_offset, max_offset, mark_find_next_str_matchfn, needle, needle_len);
 }
 
-static char* mark_find_next_cre_matchfn(char* haystack, bint_t haystack_len, bint_t max_offset, void* cre, void* unused, bint_t* ret_needle_len) {
+static char* mark_find_next_cre_matchfn(char* haystack, bint_t haystack_len, bint_t look_offset, bint_t max_offset, void* cre, void* unused, bint_t* ret_needle_len) {
     int rc;
     int substrs[3];
     MLBUF_INIT_PCRE_EXTRA(pcre_extra);
-    if ((rc = pcre_exec((pcre*)cre, &pcre_extra, haystack, haystack_len, 0, 0, substrs, 3)) >= 0) {
+    if ((rc = pcre_exec((pcre*)cre, &pcre_extra, haystack, haystack_len, look_offset, 0, substrs, 3)) >= 0) {
         if (ret_needle_len) *ret_needle_len = (bint_t)(substrs[1] - substrs[0]);
         return haystack + substrs[0];
     }
     return NULL;
 }
 
-static char* mark_find_prev_cre_matchfn(char* haystack, bint_t haystack_len, bint_t max_offset, void* cre, void* unused, bint_t* ret_needle_len) {
-    return mark_find_match_prev(haystack, haystack_len, max_offset, mark_find_next_cre_matchfn, cre, unused);
+static char* mark_find_prev_cre_matchfn(char* haystack, bint_t haystack_len, bint_t look_offset, bint_t max_offset, void* cre, void* unused, bint_t* ret_needle_len) {
+    return mark_find_match_prev(haystack, haystack_len, look_offset, max_offset, mark_find_next_cre_matchfn, cre, unused);
 }

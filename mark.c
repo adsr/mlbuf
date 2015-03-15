@@ -320,10 +320,9 @@ int mark_swap_with_mark(mark_t* self, mark_t* other) {
     return MLBUF_OK;
 }
 
-// Free a mark
+// Destroy a mark
 int mark_destroy(mark_t* self) {
-    free(self);
-    return MLBUF_OK;
+    return buffer_remove_mark(self->bline->buffer, self);
 }
 
 #define MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND(mark, findfn, ...) \
@@ -443,7 +442,7 @@ static int mark_find_re(mark_t* self, char* re, bint_t re_len, int reverse, blin
     int erroffset;
     MLBUF_MAKE_GT_EQ0(re_len);
     regex = malloc(re_len + 1);
-    snprintf(regex, re_len, "%s", re);
+    snprintf(regex, re_len + 1, "%s", re);
     cre = pcre_compile((const char*)regex, PCRE_NO_AUTO_CAPTURE, &error, &erroffset, NULL); // TODO utf8
     if (cre == NULL) {
         // TODO log error

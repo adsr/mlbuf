@@ -191,6 +191,23 @@ mark_t* buffer_add_mark(buffer_t* self, bline_t* maybe_line, bint_t maybe_col) {
     return mark;
 }
 
+// Remove mark from buffer, freeing any range srules that use it
+int buffer_remove_mark(buffer_t* self, mark_t* mark) {
+    srule_node_t* node;
+    srule_node_t* node_tmp;
+    DL_DELETE(mark->bline->marks, mark);
+    DL_FOREACH_SAFE(self->multi_srules, node, node_tmp) {
+        if (node->srule->type == MLBUF_SRULE_TYPE_RANGE
+            && (node->srule->range_a == mark
+            ||  node->srule->range_b == mark)
+        ) {
+            buffer_remove_srule(self, node->srule);
+        }
+    }
+    free(mark);
+    return MLBUF_OK;
+}
+
 // Get buffer contents and length
 int buffer_get(buffer_t* self, char** ret_data, bint_t* ret_data_len) {
     bline_t* bline;

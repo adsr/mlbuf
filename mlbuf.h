@@ -130,6 +130,7 @@ struct srule_node_s {
 buffer_t* buffer_new();
 buffer_t* buffer_new_open(char* path, int path_len);
 mark_t* buffer_add_mark(buffer_t* self, bline_t* maybe_line, bint_t maybe_col);
+int buffer_remove_mark(buffer_t* self, mark_t* mark);
 int buffer_open(buffer_t* self, char* path, int path_len);
 int buffer_save(buffer_t* self);
 int buffer_save_as(buffer_t* self, char* path, int path_len);
@@ -192,6 +193,7 @@ int mark_is_lt(mark_t* self, mark_t* other);
 int mark_is_gt(mark_t* self, mark_t* other);
 int mark_is_eq(mark_t* self, mark_t* other);
 int mark_swap_with_mark(mark_t* self, mark_t* other);
+int mark_destroy(mark_t* self);
 
 // srule functions
 srule_t* srule_new_single(char* re, bint_t re_len, uint16_t fg, uint16_t bg);

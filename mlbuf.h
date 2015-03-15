@@ -229,17 +229,17 @@ void* recalloc(void* ptr, size_t orig_num, size_t new_num, size_t el_size);
 
 #define MLBUF_BLINE_DATA_STOP(bline) ((bline)->data + ((bline)->data_len))
 
-#define MLBUF_MARK_MOVE(pmark, ptarget, pcol, psettarg) do { \
+#define MLBUF_MARK_MOVE(pmark, ptarget, pcol, psettarg, pstyle) do { \
     DL_DELETE((pmark)->bline->marks, (pmark)); \
     (pmark)->bline = (ptarget); \
-    MLBUF_MARK_SET_COL((pmark), (pcol), (psettarg)); \
+    MLBUF_MARK_SET_COL((pmark), (pcol), (psettarg), (pstyle)); \
     DL_APPEND((ptarget)->marks, (pmark)); \
 } while(0)
 
-#define MLBUF_MARK_SET_COL(pmark, pcol, psettarg) do { \
+#define MLBUF_MARK_SET_COL(pmark, pcol, psettarg, pstyle) do { \
     (pmark)->col = MLBUF_MIN((pmark)->bline->char_count, MLBUF_MAX(0, (pcol))); \
     if (psettarg) (pmark)->target_col = (pmark)->col; \
-    if ((pmark)->is_in_range_srule) buffer_apply_styles((pmark)->bline->buffer, (pmark)->bline->buffer->first_line, (pmark)->bline->buffer->line_count); \
+    if ((pstyle) && (pmark)->is_in_range_srule) buffer_apply_styles((pmark)->bline->buffer, (pmark)->bline->buffer->first_line, (pmark)->bline->buffer->line_count); \
 } while(0)
 
 #define MLBUF_DEBUG_PRINTF(fmt, ...) do { \

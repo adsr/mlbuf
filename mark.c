@@ -52,7 +52,7 @@ int mark_delete_before(mark_t* self, bint_t num_chars) {
 int mark_move_to(mark_t* self, bint_t line_index, bint_t col) {
     bline_t* bline;
     buffer_get_bline(self->bline->buffer, line_index, &bline);
-    MLBUF_MARK_MOVE(self, bline, col, 1);
+    MLBUF_MARK_MOVE(self, bline, col, 1, 1);
     return MLBUF_OK;
 }
 
@@ -89,37 +89,37 @@ int mark_move_vert(mark_t* self, bint_t line_delta) {
     if (cur_line == self->bline) {
         return MLBUF_OK;
     }
-    MLBUF_MARK_MOVE(self, cur_line, self->target_col, 0);
+    MLBUF_MARK_MOVE(self, cur_line, self->target_col, 0, 1);
     return MLBUF_OK;
 }
 
 // Move mark to beginning of line
 int mark_move_bol(mark_t* self) {
-    MLBUF_MARK_SET_COL(self, 0, 1);
+    MLBUF_MARK_SET_COL(self, 0, 1, 1);
     return MLBUF_OK;
 }
 
 // Move mark to end of line
 int mark_move_eol(mark_t* self) {
-    MLBUF_MARK_SET_COL(self, self->bline->char_count, 1);
+    MLBUF_MARK_SET_COL(self, self->bline->char_count, 1, 1);
     return MLBUF_OK;
 }
 
 // Move mark to a column on the current line
 int mark_move_col(mark_t* self, bint_t col) {
-    MLBUF_MARK_SET_COL(self, col, 1);
+    MLBUF_MARK_SET_COL(self, col, 1, 1);
     return MLBUF_OK;
 }
 
 // Move mark to beginning of buffer
 int mark_move_beginning(mark_t* self) {
-    MLBUF_MARK_MOVE(self, self->bline->buffer->first_line, 0, 1);
+    MLBUF_MARK_MOVE(self, self->bline->buffer->first_line, 0, 1, 1);
     return MLBUF_OK;
 }
 
 // Move mark to end of buffer
 int mark_move_end(mark_t* self) {
-    MLBUF_MARK_MOVE(self, self->bline->buffer->last_line, self->bline->buffer->last_line->char_count, 1);
+    MLBUF_MARK_MOVE(self, self->bline->buffer->last_line, self->bline->buffer->last_line->char_count, 1, 1);
     return MLBUF_OK;
 }
 
@@ -128,7 +128,7 @@ int mark_move_offset(mark_t* self, bint_t offset) {
     bline_t* dest_line;
     bint_t dest_col;
     buffer_get_bline_col(self->bline->buffer, offset, &dest_line, &dest_col);
-    MLBUF_MARK_MOVE(self, dest_line, dest_col, 1);
+    MLBUF_MARK_MOVE(self, dest_line, dest_col, 1, 1);
     return MLBUF_OK;
 }
 
@@ -330,7 +330,7 @@ int mark_destroy(mark_t* self) {
     bline_t* line; \
     bint_t col; \
     if ((rc = (findfn)((mark), __VA_ARGS__, &line, &col)) == MLBUF_OK) { \
-        MLBUF_MARK_MOVE((mark), line, col, 1); \
+        MLBUF_MARK_MOVE((mark), line, col, 1, 1); \
         return MLBUF_OK; \
     } \
     return rc;

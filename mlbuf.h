@@ -98,6 +98,7 @@ struct mark_s {
     bline_t* bline;
     bint_t col;
     bint_t target_col;
+    int is_in_range_srule;
     char letter;
     mark_t* next;
     mark_t* prev;
@@ -149,6 +150,7 @@ int buffer_remove_srule(buffer_t* self, srule_t* srule);
 int buffer_set_callback(buffer_t* self, buffer_callback_t cb, void* udata);
 int buffer_set_tab_width(buffer_t* self, int tab_width);
 int buffer_set_styles_enabled(buffer_t* self, int is_enabled);
+int buffer_apply_styles(buffer_t* self, bline_t* start_line, bint_t line_delta);
 int buffer_debug_dump(buffer_t* self, FILE* stream);
 int buffer_destroy(buffer_t* self);
 
@@ -232,12 +234,13 @@ void* recalloc(void* ptr, size_t orig_num, size_t new_num, size_t el_size);
     (pmark)->bline = (ptarget); \
     MLBUF_MARK_SET_COL((pmark), (pcol), (psettarg)); \
     DL_APPEND((ptarget)->marks, (pmark)); \
-} while(0);
+} while(0)
 
 #define MLBUF_MARK_SET_COL(pmark, pcol, psettarg) do { \
     (pmark)->col = MLBUF_MIN((pmark)->bline->char_count, MLBUF_MAX(0, (pcol))); \
     if (psettarg) (pmark)->target_col = (pmark)->col; \
-} while(0);
+    if ((pmark)->is_in_range_srule) buffer_apply_styles((pmark)->bline->buffer, (pmark)->bline->buffer->first_line, (pmark)->bline->buffer->line_count); \
+} while(0)
 
 #define MLBUF_DEBUG_PRINTF(fmt, ...) do { \
     if (MLBUF_DEBUG) { \

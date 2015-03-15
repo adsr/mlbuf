@@ -131,7 +131,7 @@ struct srule_node_s {
 buffer_t* buffer_new();
 buffer_t* buffer_new_open(char* path, int path_len);
 mark_t* buffer_add_mark(buffer_t* self, bline_t* maybe_line, bint_t maybe_col);
-int buffer_remove_mark(buffer_t* self, mark_t* mark);
+int buffer_destroy_mark(buffer_t* self, mark_t* mark);
 int buffer_open(buffer_t* self, char* path, int path_len);
 int buffer_save(buffer_t* self);
 int buffer_save_as(buffer_t* self, char* path, int path_len);

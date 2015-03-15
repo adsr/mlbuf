@@ -190,8 +190,8 @@ mark_t* buffer_add_mark(buffer_t* self, bline_t* maybe_line, bint_t maybe_col) {
     return mark;
 }
 
-// Remove mark from buffer, freeing any range srules that use it
-int buffer_remove_mark(buffer_t* self, mark_t* mark) {
+// Remove mark from buffer and free it, removing any range srules that use it
+int buffer_destroy_mark(buffer_t* self, mark_t* mark) {
     srule_node_t* node;
     srule_node_t* node_tmp;
     DL_DELETE(mark->bline->marks, mark);

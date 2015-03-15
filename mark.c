@@ -322,7 +322,7 @@ int mark_swap_with_mark(mark_t* self, mark_t* other) {
 
 // Destroy a mark
 int mark_destroy(mark_t* self) {
-    return buffer_remove_mark(self->bline->buffer, self);
+    return buffer_destroy_mark(self->bline->buffer, self);
 }
 
 #define MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND(mark, findfn, ...) \

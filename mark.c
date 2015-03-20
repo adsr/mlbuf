@@ -4,8 +4,8 @@
 #include "mlbuf.h"
 
 typedef char* (*mark_find_match_fn)(char* haystack, bint_t haystack_len, bint_t look_offset, bint_t max_offset, void* u1, void* u2, bint_t* ret_needle_len);
-static int mark_find_match(mark_t* self, mark_find_match_fn matchfn, void* u1, void* u2, int reverse, bline_t** ret_line, bint_t* ret_col, bint_t* ret_char_count);
-static int mark_find_re(mark_t* self, char* re, bint_t re_len, int reverse, bline_t** ret_line, bint_t* ret_col, bint_t* ret_char_count);
+static int mark_find_match(mark_t* self, mark_find_match_fn matchfn, void* u1, void* u2, int reverse, bline_t** ret_line, bint_t* ret_col, bint_t* ret_num_chars);
+static int mark_find_re(mark_t* self, char* re, bint_t re_len, int reverse, bline_t** ret_line, bint_t* ret_col, bint_t* ret_num_chars);
 static char* mark_find_match_prev(char* haystack, bint_t haystack_len, bint_t look_offset, bint_t max_offset, mark_find_match_fn matchfn, void* u1, void* u2);
 static char* mark_find_next_str_matchfn(char* haystack, bint_t haystack_len, bint_t look_offset, bint_t max_offset, void* needle, void* needle_len, bint_t* ret_needle_len);
 static char* mark_find_prev_str_matchfn(char* haystack, bint_t haystack_len, bint_t look_offset, bint_t max_offset, void* needle, void* needle_len, bint_t* ret_needle_len);
@@ -133,33 +133,33 @@ int mark_move_offset(mark_t* self, bint_t offset) {
 }
 
 // Find next occurrence of string from mark
-int mark_find_next_str(mark_t* self, char* str, bint_t str_len, bline_t** ret_line, bint_t* ret_col, bint_t* ret_char_count) {
-    return mark_find_match(self, mark_find_next_str_matchfn, (void*)str, (void*)&str_len, 0, ret_line, ret_col, ret_char_count);
+int mark_find_next_str(mark_t* self, char* str, bint_t str_len, bline_t** ret_line, bint_t* ret_col, bint_t* ret_num_chars) {
+    return mark_find_match(self, mark_find_next_str_matchfn, (void*)str, (void*)&str_len, 0, ret_line, ret_col, ret_num_chars);
 }
 
 // Find prev occurrence of string from mark
-int mark_find_prev_str(mark_t* self, char* str, bint_t str_len, bline_t** ret_line, bint_t* ret_col, bint_t* ret_char_count) {
-    return mark_find_match(self, mark_find_prev_str_matchfn, (void*)str, (void*)&str_len, 1, ret_line, ret_col, ret_char_count);
+int mark_find_prev_str(mark_t* self, char* str, bint_t str_len, bline_t** ret_line, bint_t* ret_col, bint_t* ret_num_chars) {
+    return mark_find_match(self, mark_find_prev_str_matchfn, (void*)str, (void*)&str_len, 1, ret_line, ret_col, ret_num_chars);
 }
 
 // Find next occurence of regex from mark
-int mark_find_next_cre(mark_t* self, pcre* cre, bline_t** ret_line, bint_t* ret_col, bint_t* ret_char_count) {
-    return mark_find_match(self, mark_find_next_cre_matchfn, (void*)cre, NULL, 0, ret_line, ret_col, ret_char_count);
+int mark_find_next_cre(mark_t* self, pcre* cre, bline_t** ret_line, bint_t* ret_col, bint_t* ret_num_chars) {
+    return mark_find_match(self, mark_find_next_cre_matchfn, (void*)cre, NULL, 0, ret_line, ret_col, ret_num_chars);
 }
 
 // Find prev occurence of regex from mark
-int mark_find_prev_cre(mark_t* self, pcre* cre, bline_t** ret_line, bint_t* ret_col, bint_t* ret_char_count) {
-    return mark_find_match(self, mark_find_prev_cre_matchfn, (void*)cre, NULL, 1, ret_line, ret_col, ret_char_count);
+int mark_find_prev_cre(mark_t* self, pcre* cre, bline_t** ret_line, bint_t* ret_col, bint_t* ret_num_chars) {
+    return mark_find_match(self, mark_find_prev_cre_matchfn, (void*)cre, NULL, 1, ret_line, ret_col, ret_num_chars);
 }
 
 // Find next occurence of uncompiled regex str from mark
-int mark_find_next_re(mark_t* self, char* re, bint_t re_len, bline_t** ret_line, bint_t* ret_col, bint_t* ret_char_count) {
-    return mark_find_re(self, re, re_len, 0, ret_line, ret_col, ret_char_count);
+int mark_find_next_re(mark_t* self, char* re, bint_t re_len, bline_t** ret_line, bint_t* ret_col, bint_t* ret_num_chars) {
+    return mark_find_re(self, re, re_len, 0, ret_line, ret_col, ret_num_chars);
 }
 
 // Find prev occurence of uncompiled regex str from mark
-int mark_find_prev_re(mark_t* self, char* re, bint_t re_len, bline_t** ret_line, bint_t* ret_col, bint_t* ret_char_count) {
-    return mark_find_re(self, re, re_len, 1, ret_line, ret_col, ret_char_count);
+int mark_find_prev_re(mark_t* self, char* re, bint_t re_len, bline_t** ret_line, bint_t* ret_col, bint_t* ret_num_chars) {
+    return mark_find_re(self, re, re_len, 1, ret_line, ret_col, ret_num_chars);
 }
 
 // Return 1 if self is before other, otherwise return 0
@@ -369,7 +369,7 @@ int mark_move_bracket_pair(mark_t* self, bint_t max_chars) {
 
 // Find first occurrence of match according to matchfn. Search backwards if
 // reverse is truthy.
-static int mark_find_match(mark_t* self, mark_find_match_fn matchfn, void* u1, void* u2, int reverse, bline_t** ret_line, bint_t* ret_col, bint_t* ret_char_count) {
+static int mark_find_match(mark_t* self, mark_find_match_fn matchfn, void* u1, void* u2, int reverse, bline_t** ret_line, bint_t* ret_col, bint_t* ret_num_chars) {
     bline_t* search_line;
     char* match;
     bint_t look_offset;
@@ -392,7 +392,7 @@ static int mark_find_match(mark_t* self, mark_find_match_fn matchfn, void* u1, v
             bline_get_col(search_line, (bint_t)((match + match_len) - search_line->data), &match_col_end);
             *ret_line = search_line;
             *ret_col = match_col;
-            *ret_char_count = match_col_end - match_col;
+            *ret_num_chars = match_col_end - match_col;
             return MLBUF_OK;
         }
         search_line = reverse ? search_line->prev : search_line->next;
@@ -432,7 +432,7 @@ static char* mark_find_match_prev(char* haystack, bint_t haystack_len, bint_t lo
 }
 
 // Find uncompiled regex from mark. Search backwards if reverse is truthy.
-static int mark_find_re(mark_t* self, char* re, bint_t re_len, int reverse, bline_t** ret_line, bint_t* ret_col, bint_t* ret_char_count) {
+static int mark_find_re(mark_t* self, char* re, bint_t re_len, int reverse, bline_t** ret_line, bint_t* ret_col, bint_t* ret_num_chars) {
     int rc;
     char* regex;
     pcre* cre;
@@ -448,9 +448,9 @@ static int mark_find_re(mark_t* self, char* re, bint_t re_len, int reverse, blin
         return MLBUF_ERR;
     }
     if (reverse) {
-        rc = mark_find_prev_cre(self, cre, ret_line, ret_col, ret_char_count);
+        rc = mark_find_prev_cre(self, cre, ret_line, ret_col, ret_num_chars);
     } else {
-        rc = mark_find_next_cre(self, cre, ret_line, ret_col, ret_char_count);
+        rc = mark_find_next_cre(self, cre, ret_line, ret_col, ret_num_chars);
     }
     pcre_free(cre);
     free(regex);

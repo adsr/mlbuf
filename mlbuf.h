@@ -194,6 +194,7 @@ int mark_get_between_mark(mark_t* self, mark_t* other, char** ret_str, bint_t* r
 int mark_is_lt(mark_t* self, mark_t* other);
 int mark_is_gt(mark_t* self, mark_t* other);
 int mark_is_eq(mark_t* self, mark_t* other);
+int mark_join(mark_t* self, mark_t* other);
 int mark_swap_with_mark(mark_t* self, mark_t* other);
 int mark_destroy(mark_t* self);
 

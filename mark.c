@@ -307,16 +307,19 @@ int mark_get_between_mark(mark_t* self, mark_t* other, char** ret_str, bint_t* r
     return MLBUF_OK;
 }
 
+// Move self to other
+int mark_join(mark_t* self, mark_t* other) {
+    MLBUF_MARK_MOVE(self, other->bline, other->col, 1, 1);
+    return MLBUF_OK;
+}
+
 // Swap positions of self and other
 int mark_swap_with_mark(mark_t* self, mark_t* other) {
-    bline_t* tmp_bline;
-    bint_t tmp_col;
-    tmp_bline = other->bline;
-    tmp_col = other->col;
-    other->bline = self->bline;
-    other->col = self->col;
-    self->bline = tmp_bline;
-    self->col = tmp_col;
+    mark_t tmp_mark;
+    tmp_mark.bline = other->bline;
+    tmp_mark.col = other->col;
+    MLBUF_MARK_MOVE(other, self->bline, self->col, 1, 1);
+    MLBUF_MARK_MOVE(self, tmp_mark.bline, tmp_mark.col, 1, 1);
     return MLBUF_OK;
 }
 
@@ -445,6 +448,7 @@ static int mark_find_re(mark_t* self, char* re, bint_t re_len, int reverse, blin
         rc = mark_find_next_cre(self, cre, ret_line, ret_col);
     }
     pcre_free(cre);
+    free(regex);
     return rc;
 }
 

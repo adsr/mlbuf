@@ -153,6 +153,7 @@ int buffer_set_styles_enabled(buffer_t* self, int is_enabled);
 int buffer_apply_styles(buffer_t* self, bline_t* start_line, bint_t line_delta);
 int buffer_debug_dump(buffer_t* self, FILE* stream);
 int buffer_destroy(buffer_t* self);
+uintmax_t buffer_hash(buffer_t* self);
 
 // bline functions
 int bline_insert(bline_t* self, bint_t col, char* data, bint_t data_len, bint_t* ret_num_chars);

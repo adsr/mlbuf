@@ -801,6 +801,42 @@ int buffer_apply_styles(buffer_t* self, bline_t* start_line, bint_t line_delta) 
     return MLBUF_OK;
 }
 
+// Return hash of buffer data
+// This is a DJBX33A implementation ported from php-src/Zend/zend_string.h
+uintmax_t buffer_hash(buffer_t* self) {
+    uintmax_t hash;
+    bline_t* bline;
+    bint_t len;
+    char* str;
+    hash = 5381;
+    for (bline = self->first_line; bline; bline = bline->next) {
+        len = bline->data_len;
+        str = bline->data;
+        for (; len >= 8; len -= 8) {
+            hash = ((hash << 5) + hash) + *str++;
+            hash = ((hash << 5) + hash) + *str++;
+            hash = ((hash << 5) + hash) + *str++;
+            hash = ((hash << 5) + hash) + *str++;
+            hash = ((hash << 5) + hash) + *str++;
+            hash = ((hash << 5) + hash) + *str++;
+            hash = ((hash << 5) + hash) + *str++;
+            hash = ((hash << 5) + hash) + *str++;
+        }
+        switch (len) {
+            case 7: hash = ((hash << 5) + hash) + *str++;
+            case 6: hash = ((hash << 5) + hash) + *str++;
+            case 5: hash = ((hash << 5) + hash) + *str++;
+            case 4: hash = ((hash << 5) + hash) + *str++;
+            case 3: hash = ((hash << 5) + hash) + *str++;
+            case 2: hash = ((hash << 5) + hash) + *str++;
+            case 1: hash = ((hash << 5) + hash) + *str++; break;
+            default: break;
+        }
+    }
+    return hash;
+}
+
+
 static int _buffer_baction_do(buffer_t* self, bline_t* bline, baction_t* action, int is_redo, bint_t* opt_repeat_offset) {
     int rc;
     bint_t col;

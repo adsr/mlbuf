@@ -1,4 +1,5 @@
-CC=colorgcc
+SHELL=/bin/bash
+CC=$(shell if which colorgcc>/dev/null; then echo colorgcc; else echo gcc; fi)
 
 all: run
 

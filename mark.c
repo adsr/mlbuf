@@ -323,6 +323,11 @@ int mark_swap_with_mark(mark_t* self, mark_t* other) {
     return MLBUF_OK;
 }
 
+// Return 1 if mark is at eol, else return 0
+int mark_is_at_eol(mark_t* self) {
+    return self->col >= self->bline->char_count ? 1 : 0;
+}
+
 // Destroy a mark
 int mark_destroy(mark_t* self) {
     return buffer_destroy_mark(self->bline->buffer, self);

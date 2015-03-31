@@ -197,6 +197,7 @@ int mark_is_gt(mark_t* self, mark_t* other);
 int mark_is_eq(mark_t* self, mark_t* other);
 int mark_join(mark_t* self, mark_t* other);
 int mark_swap_with_mark(mark_t* self, mark_t* other);
+int mark_is_at_eol(mark_t* self);
 int mark_destroy(mark_t* self);
 
 // srule functions

@@ -6,7 +6,7 @@ TESTS=$(SRCS:.c=)
 all: run
 
 run: $(TESTS)
-	find . -type f -executable -print0 | xargs -0 -n1 -I{} sh -c 'tput bold; echo TEST {}; tput sgr0; LD_LIBRARY_PATH=.. {}; echo'
+	find . -type f -executable -print0 | xargs -0 -n1 -I{} sh -c 'tput bold; echo TEST {}; tput sgr0; LD_LIBRARY_PATH=.. {}; ec=$$?; echo; exit $$ec'
 
 $(TESTS): $(SRCS)
 	$(CC) -g -Wall -I.. -L.. $@.c -o $@ -lmlbuf -lpcre

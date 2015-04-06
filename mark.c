@@ -375,20 +375,41 @@ int mark_move_bracket_pair(mark_t* self, bint_t max_chars) {
 // Find first occurrence of match according to matchfn. Search backwards if
 // reverse is truthy.
 static int mark_find_match(mark_t* self, mark_find_match_fn matchfn, void* u1, void* u2, int reverse, bline_t** ret_line, bint_t* ret_col, bint_t* ret_num_chars) {
-    bline_t* search_line;
-    char* match;
-    bint_t look_offset;
-    bint_t match_col;
-    bint_t match_col_end;
-    bint_t max_offset;
-    bint_t match_len;
+    bline_t* search_line = NULL;
+    char* match = NULL;
+    bint_t look_offset = 0;
+    bint_t match_col = 0;
+    bint_t match_col_end = 0;
+    bint_t max_offset = 0;
+    bint_t match_len = 0;
     search_line = self->bline;
+    *ret_line = NULL;
     if (reverse) {
-        look_offset = 0;
-        max_offset = self->col < 1 ? 0 : search_line->chars[self->col - 1].index;
+        if (self->col < 1) {
+            // At bol, so look on prev line
+            search_line = search_line->prev;
+            if (!search_line) return MLBUF_ERR;
+            look_offset = 0;
+            //max_offset = search_line->data_len - 1;
+            max_offset = search_line->data_len;
+        } else {
+            look_offset = 0;
+            max_offset = search_line->chars[self->col - 1].index;
+        }
+
     } else {
-        look_offset = self->col + 1 < search_line->char_count ? search_line->chars[self->col + 1].index : search_line->data_len;
-        max_offset = search_line->data_len - 1;
+        if (self->col >= search_line->char_count) {
+            // At eol, so look on next line
+            search_line = search_line->next;
+            if (!search_line) return MLBUF_ERR;
+            look_offset = 0;
+            //max_offset = search_line->data_len - 1;
+            max_offset = search_line->data_len;
+        } else {
+            look_offset = self->col + 1 < search_line->char_count ? search_line->chars[self->col + 1].index : search_line->data_len;
+            //max_offset = search_line->data_len - 1;
+            max_offset = search_line->data_len;
+        }
     }
     while (search_line) {
         match = matchfn(search_line->data, search_line->data_len, look_offset, max_offset, u1, u2, &match_len);
@@ -403,10 +424,10 @@ static int mark_find_match(mark_t* self, mark_find_match_fn matchfn, void* u1, v
         search_line = reverse ? search_line->prev : search_line->next;
         if (search_line) {
             look_offset = 0;
-            max_offset = search_line->data_len - 1;
+            //max_offset = search_line->data_len - 1;
+            max_offset = search_line->data_len;
         }
     }
-    *ret_line = NULL;
     return MLBUF_ERR;
 }
 

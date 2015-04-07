@@ -1393,7 +1393,7 @@ srule_t* srule_new_single(char* re, bint_t re_len, uint16_t fg, uint16_t bg) {
     rule->style.fg = fg;
     rule->style.bg = bg;
     rule->re = malloc((re_len + 1) * sizeof(char));
-    snprintf(rule->re, re_len + 1, "%.*s", re_len, re);
+    snprintf(rule->re, re_len + 1, "%.*s", (int)re_len, re);
     rule->cre = pcre_compile((const char*)rule->re, PCRE_NO_AUTO_CAPTURE, &re_error, &re_erroffset, NULL);
     if (!rule->cre) {
         // TODO log error
@@ -1414,8 +1414,8 @@ srule_t* srule_new_multi(char* re, bint_t re_len, char* re_end, bint_t re_end_le
     rule->style.bg = bg;
     rule->re = malloc((re_len + 1) * sizeof(char));
     rule->re_end = malloc((re_end_len + 1) * sizeof(char));
-    snprintf(rule->re, re_len + 1, "%.*s", re_len, re);
-    snprintf(rule->re_end, re_end_len + 1, "%.*s", re_end_len, re_end);
+    snprintf(rule->re, re_len + 1, "%.*s", (int)re_len, re);
+    snprintf(rule->re_end, re_end_len + 1, "%.*s", (int)re_end_len, re_end);
     rule->cre = pcre_compile((const char*)rule->re, PCRE_NO_AUTO_CAPTURE, &re_error, &re_erroffset, NULL);
     rule->cre_end = pcre_compile((const char*)rule->re_end, PCRE_NO_AUTO_CAPTURE, &re_error, &re_erroffset, NULL);
     if (!rule->cre || !rule->cre_end) {

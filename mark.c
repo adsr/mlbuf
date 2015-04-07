@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>
 #include <pcre.h>
 #include "mlbuf.h"
 
@@ -370,6 +371,40 @@ int mark_move_prev_re(mark_t* self, char* re, bint_t re_len) {
 
 int mark_move_bracket_pair(mark_t* self, bint_t max_chars) {
     MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_bracket_pair, max_chars);
+}
+
+// Return 1 if mark is at a word boundary. If side <= -1, return 1 only for
+// left word boundary (i.e., \W\w). If side >= 1, return 1 only for right word
+// boundary (i.e., \w\W). If side == 0, return 1 for either case.
+int mark_is_at_word_bound(mark_t* self, int side) {
+    uint32_t before, after;
+    before = self->col > 0 && self->col - 1 < self->bline->char_count ? self->bline->chars[self->col - 1].ch : 0;
+    after  = self->col < self->bline->char_count ? self->bline->chars[self->col].ch : 0;
+    if (side <= -1 || side == 0) {
+        // If before is bol or non-word, and after is word
+        if ((before == 0 || !(isalnum(before) || before == '_'))
+            && (isalnum(after) || after == '_')
+        ) {
+            return 1;
+        }
+    }
+    if (side >= 1 || side == 0) {
+        // If after is eol or non-word, and before is word
+        if ((after == 0 || !(isalnum(after) || after == '_'))
+            && (isalnum(before) || before == '_')
+        ) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// Return char under mark, or 0 if at eol.
+uint32_t mark_get_char(mark_t* self) {
+    if (mark_is_at_eol(self)) {
+        return 0;
+    }
+    return self->bline->chars[self->col].ch;
 }
 
 // Find first occurrence of match according to matchfn. Search backwards if

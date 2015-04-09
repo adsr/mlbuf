@@ -198,8 +198,10 @@ int mark_is_eq(mark_t* self, mark_t* other);
 int mark_join(mark_t* self, mark_t* other);
 int mark_swap_with_mark(mark_t* self, mark_t* other);
 int mark_is_at_eol(mark_t* self);
+int mark_is_at_bol(mark_t* self);
 int mark_is_at_word_bound(mark_t* self, int side);
-uint32_t mark_get_char(mark_t* self);
+uint32_t mark_get_char_after(mark_t* self);
+uint32_t mark_get_char_before(mark_t* self);
 int mark_destroy(mark_t* self);
 
 // srule functions

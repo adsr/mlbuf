@@ -329,6 +329,11 @@ int mark_is_at_eol(mark_t* self) {
     return self->col >= self->bline->char_count ? 1 : 0;
 }
 
+// Return 1 if mark is at bol, else return 0
+int mark_is_at_bol(mark_t* self) {
+    return self->col <= 0;
+}
+
 // Destroy a mark
 int mark_destroy(mark_t* self) {
     return buffer_destroy_mark(self->bline->buffer, self);
@@ -399,12 +404,20 @@ int mark_is_at_word_bound(mark_t* self, int side) {
     return 0;
 }
 
-// Return char under mark, or 0 if at eol.
-uint32_t mark_get_char(mark_t* self) {
+// Return char after mark, or 0 if at eol.
+uint32_t mark_get_char_after(mark_t* self) {
     if (mark_is_at_eol(self)) {
         return 0;
     }
     return self->bline->chars[self->col].ch;
+}
+
+// Return char before mark, or 0 if at bol.
+uint32_t mark_get_char_before(mark_t* self) {
+    if (mark_is_at_bol(self)) {
+        return 0;
+    }
+    return self->bline->chars[self->col - 1].ch;
 }
 
 // Find first occurrence of match according to matchfn. Search backwards if

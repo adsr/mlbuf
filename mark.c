@@ -191,9 +191,53 @@ int mark_is_eq(mark_t* self, mark_t* other) {
     return 0;
 }
 
+// Find top-level bracket to the left examining no more than max_chars
+int mark_find_bracket_top(mark_t* self, bint_t max_chars, bline_t** ret_line, bint_t* ret_col, bint_t* ret_brkt) {
+    bline_t* cur_line;
+    bint_t col;
+    int* stacks;
+    int found;
+    int i;
+    int i_left;
+    static char pairs[8] = { // TODO define these once somewhere
+        '[', ']',
+        '(', ')',
+        '{', '}',
+        '<', '>'
+    };
+    cur_line = self->bline;
+    col = self->col;
+    stacks = calloc(128, sizeof(int));
+    found = 0;
+    while (!found && max_chars > 0 && cur_line) {
+        col -= 1;
+        if (col < 0) {
+            cur_line = cur_line->prev;
+            if (cur_line) col = cur_line->char_count;
+            max_chars -= 1;
+            continue;
+        }
+        for (i = 0; i < 8; i++) {
+            i_left = (i % 2 == 0 ? i : i - 1);
+            if (cur_line->chars[col].ch == pairs[i]) {
+                stacks[(int)pairs[i_left]] += (i % 2 == 0 ? -1 : 1);
+                if (stacks[(int)pairs[i_left]] <= -1) {
+                    *ret_line = cur_line;
+                    *ret_col = col;
+                    *ret_brkt = pairs[i];
+                    found = 1;
+                }
+                break;
+            }
+        }
+    }
+    free(stacks);
+    return found ? MLBUF_OK : MLBUF_ERR;
+}
+
 // Find the matching bracket character under the mark, examining no more than
 // max_chars.
-int mark_find_bracket_pair(mark_t* self, bint_t max_chars, bline_t** ret_line, bint_t* ret_col, bint_t* ret_ignore) {
+int mark_find_bracket_pair(mark_t* self, bint_t max_chars, bline_t** ret_line, bint_t* ret_col, bint_t* ret_brkt) {
     char brkt;
     char targ;
     char cur;
@@ -247,6 +291,7 @@ int mark_find_bracket_pair(mark_t* self, bint_t max_chars, bline_t** ret_line, b
                     // Match!
                     *ret_line = cur_line;
                     *ret_col = col;
+                    *ret_brkt = targ;
                     return MLBUF_OK;
                 } else {
                     nest -= 1;
@@ -376,6 +421,10 @@ int mark_move_prev_re(mark_t* self, char* re, bint_t re_len) {
 
 int mark_move_bracket_pair(mark_t* self, bint_t max_chars) {
     MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_bracket_pair, max_chars);
+}
+
+int mark_move_bracket_top(mark_t* self, bint_t max_chars) {
+    MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_bracket_top, max_chars);
 }
 
 // Return 1 if mark is at a word boundary. If side <= -1, return 1 only for

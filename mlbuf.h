@@ -181,7 +181,8 @@ int mark_find_next_cre(mark_t* self, pcre* cre, bline_t** ret_line, bint_t* ret_
 int mark_find_prev_cre(mark_t* self, pcre* cre, bline_t** ret_line, bint_t* ret_col, bint_t* ret_num_chars);
 int mark_find_next_re(mark_t* self, char* re, bint_t re_len, bline_t** ret_line, bint_t* ret_col, bint_t* ret_num_chars);
 int mark_find_prev_re(mark_t* self, char* re, bint_t re_len, bline_t** ret_line, bint_t* ret_col, bint_t* ret_num_chars);
-int mark_find_bracket_pair(mark_t* self, bint_t max_chars, bline_t** ret_line, bint_t* ret_col, bint_t* ret_ignore);
+int mark_find_bracket_pair(mark_t* self, bint_t max_chars, bline_t** ret_line, bint_t* ret_col, bint_t* ret_brkt);
+int mark_find_bracket_top(mark_t* self, bint_t max_chars, bline_t** ret_line, bint_t* ret_col, bint_t* ret_brkt);
 int mark_move_next_str(mark_t* self, char* str, bint_t str_len);
 int mark_move_prev_str(mark_t* self, char* str, bint_t str_len);
 int mark_move_next_cre(mark_t* self, pcre* cre);
@@ -189,6 +190,7 @@ int mark_move_prev_cre(mark_t* self, pcre* cre);
 int mark_move_next_re(mark_t* self, char* re, bint_t re_len);
 int mark_move_prev_re(mark_t* self, char* re, bint_t re_len);
 int mark_move_bracket_pair(mark_t* self, bint_t max_chars);
+int mark_move_bracket_top(mark_t* self, bint_t max_chars);
 int mark_get_offset(mark_t* self, bint_t* ret_offset);
 int mark_delete_between_mark(mark_t* self, mark_t* other);
 int mark_get_between_mark(mark_t* self, mark_t* other, char** ret_str, bint_t* ret_str_len);

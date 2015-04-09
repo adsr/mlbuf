@@ -246,7 +246,9 @@ int buffer_set(buffer_t* self, char* data, bint_t data_len) {
     if ((rc = buffer_delete(self, 0, self->char_count)) != MLBUF_OK) {
         return rc;
     }
-    return buffer_insert(self, 0, data, data_len, NULL);
+    rc = buffer_insert(self, 0, data, data_len, NULL);
+    if (self->actions) _buffer_truncate_undo_stack(self, self->actions);
+    return rc;
 }
 
 // Insert data into buffer
@@ -881,18 +883,18 @@ static int _buffer_update(buffer_t* self, baction_t* action) {
     // Restyle from start_line
     buffer_apply_styles(self, action->start_line, action->line_delta);
 
-    // Handle undo stack
-    if (self->_is_in_undo) {
-        _baction_destroy(action);
-    } else {
-        _buffer_add_to_undo_stack(self, action);
-    }
-
     // Raise event on listener
     if (self->callback && !self->is_in_callback) {
         self->is_in_callback = 1;
         self->callback(self, action, self->callback_udata);
         self->is_in_callback = 0;
+    }
+
+    // Handle undo stack
+    if (self->_is_in_undo) {
+        _baction_destroy(action);
+    } else {
+        _buffer_add_to_undo_stack(self, action);
     }
 
     return MLBUF_OK;
@@ -902,7 +904,7 @@ static int _buffer_truncate_undo_stack(buffer_t* self, baction_t* action_from) {
     baction_t* action_target;
     baction_t* action_tmp;
     int do_delete;
-    self->action_tail = action_from->prev;
+    self->action_tail = action_from->prev != action_from ? action_from->prev : NULL;
     do_delete = 0;
     DL_FOREACH_SAFE(self->actions, action_target, action_tmp) {
         if (!do_delete && action_target == action_from) {

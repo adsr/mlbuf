@@ -564,7 +564,7 @@ static int mark_find_re(mark_t* self, char* re, bint_t re_len, int reverse, blin
     MLBUF_MAKE_GT_EQ0(re_len);
     regex = malloc(re_len + 1);
     snprintf(regex, re_len + 1, "%s", re);
-    cre = pcre_compile((const char*)regex, PCRE_NO_AUTO_CAPTURE, &error, &erroffset, NULL); // TODO utf8
+    cre = pcre_compile((const char*)regex, PCRE_NO_AUTO_CAPTURE | PCRE_CASELESS, &error, &erroffset, NULL);
     if (cre == NULL) {
         // TODO log error
         free(regex);

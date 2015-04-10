@@ -4,13 +4,13 @@ CC=$(shell if which colorgcc>/dev/null; then echo colorgcc; else echo gcc; fi)
 all: libmlbuf.so
 
 buffer.o: *.c
-	$(CC) -D_GNU_SOURCE -Wall -pg -g -fPIC -lpcre -c *.c
+	$(CC) -D_GNU_SOURCE -Wall -g -fPIC -lpcre -c *.c
 
 libmlbuf.a: buffer.o
 	ar rcs libmlbuf.a *.o
 
 libmlbuf.so: libmlbuf.a
-	$(CC) -Wall -pg -g -shared -lpcre -o libmlbuf.so *.o
+	$(CC) -Wall -g -shared -lpcre -o libmlbuf.so *.o
 
 test: libmlbuf.so
 	make -C tests

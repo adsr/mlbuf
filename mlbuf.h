@@ -207,7 +207,7 @@ uint32_t mark_get_char_before(mark_t* self);
 int mark_destroy(mark_t* self);
 
 // srule functions
-srule_t* srule_new_single(char* re, bint_t re_len, uint16_t fg, uint16_t bg);
+srule_t* srule_new_single(char* re, bint_t re_len, int caseless, uint16_t fg, uint16_t bg);
 srule_t* srule_new_multi(char* re, bint_t re_len, char* re_end, bint_t re_end_len, uint16_t fg, uint16_t bg);
 srule_t* srule_new_range(mark_t* range_a, mark_t* range_b, uint16_t fg, uint16_t bg);
 int srule_destroy(srule_t* srule);

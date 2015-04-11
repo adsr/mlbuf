@@ -3,7 +3,7 @@
 MAIN("hello\nworld",
     bint_t i;
     srule_t* srule;
-    srule = srule_new_single("world", sizeof("world")-1, 1, 2);
+    srule = srule_new_single("world", sizeof("world")-1, 0, 1, 2);
     buffer_add_srule(buf, srule);
     buffer_remove_srule(buf, srule);
     for (i = 0; i < buf->first_line->char_count; i++) {

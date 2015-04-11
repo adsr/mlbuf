@@ -15,11 +15,7 @@ libmlbuf.so: libmlbuf.a
 test: libmlbuf.so
 	make -C tests
 
-demo: libmlbuf.so
-	make -C demo
-
 clean:
 	rm -f *.o
 	rm -f libmlbuf.a libmlbuf.so
 	make -C tests clean
-	make -C demo clean

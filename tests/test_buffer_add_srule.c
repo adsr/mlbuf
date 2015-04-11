@@ -5,7 +5,7 @@ MAIN("hello\nworld",
     srule_t* srule1;
     srule_t* srule2;
 
-    srule1 = srule_new_single("world", sizeof("world")-1, 1, 2);
+    srule1 = srule_new_single("world", sizeof("world")-1, 0, 1, 2);
     srule2 = srule_new_multi("lo", sizeof("lo")-1, "wo", sizeof("wo")-1, 3, 4);
 
     buffer_add_srule(buf, srule1);

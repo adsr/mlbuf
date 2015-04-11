@@ -1386,7 +1386,7 @@ static int _buffer_bline_count_chars(bline_t* bline) {
 }
 
 // Make a new single-line style rule
-srule_t* srule_new_single(char* re, bint_t re_len, uint16_t fg, uint16_t bg) {
+srule_t* srule_new_single(char* re, bint_t re_len, int caseless, uint16_t fg, uint16_t bg) {
     srule_t* rule;
     const char *re_error;
     int re_erroffset;
@@ -1396,7 +1396,7 @@ srule_t* srule_new_single(char* re, bint_t re_len, uint16_t fg, uint16_t bg) {
     rule->style.bg = bg;
     rule->re = malloc((re_len + 1) * sizeof(char));
     snprintf(rule->re, re_len + 1, "%.*s", (int)re_len, re);
-    rule->cre = pcre_compile((const char*)rule->re, PCRE_NO_AUTO_CAPTURE, &re_error, &re_erroffset, NULL);
+    rule->cre = pcre_compile((const char*)rule->re, PCRE_NO_AUTO_CAPTURE | (caseless ? PCRE_CASELESS : 0), &re_error, &re_erroffset, NULL);
     if (!rule->cre) {
         // TODO log error
         srule_destroy(rule);

@@ -482,8 +482,8 @@ int buffer_add_srule(buffer_t* self, srule_t* srule) {
         DL_APPEND(self->multi_srules, node);
     }
     if (srule->type == MLBUF_SRULE_TYPE_RANGE) {
-        srule->range_a->is_in_range_srule = 1;
-        srule->range_b->is_in_range_srule = 1;
+        srule->range_a->range_srule = srule;
+        srule->range_b->range_srule = srule;
     }
     return buffer_apply_styles(self, self->first_line, self->line_count - 1);
 }
@@ -503,8 +503,8 @@ int buffer_remove_srule(buffer_t* self, srule_t* srule) {
     DL_FOREACH_SAFE(*head, node, node_tmp) {
         if (node->srule != srule) continue;
         if (srule->type == MLBUF_SRULE_TYPE_RANGE) {
-            srule->range_a->is_in_range_srule = 0;
-            srule->range_b->is_in_range_srule = 0;
+            srule->range_a->range_srule = NULL;
+            srule->range_b->range_srule = NULL;
         }
         DL_DELETE(*head, node);
         free(node);
@@ -795,7 +795,6 @@ int buffer_apply_styles(buffer_t* self, bline_t* start_line, bint_t line_delta) 
     //     line_delta == 0: 1 (start_line)
     //     line_delta  > 0: 1 + line_delta (start_line + added lines)
     min_nlines = 1 + (line_delta < 0 ? 1 : line_delta);
-
     _buffer_apply_styles_singles(start_line, min_nlines);
     _buffer_apply_styles_multis(start_line, min_nlines, MLBUF_SRULE_TYPE_MULTI);
     _buffer_apply_styles_multis(start_line, min_nlines, MLBUF_SRULE_TYPE_RANGE);
@@ -1147,7 +1146,7 @@ static int _buffer_bline_free(bline_t* bline, bline_t* maybe_mark_line, bint_t c
     if (bline->marks) {
         DL_FOREACH_SAFE(bline->marks, mark, mark_tmp) {
             if (maybe_mark_line) {
-                MLBUF_MARK_MOVE(mark, maybe_mark_line, mark->col + col_delta, 1, 0);
+                _mark_mark_move_inner(mark, maybe_mark_line, mark->col + col_delta, 1, 0);
             } else {
                 DL_DELETE(bline->marks, mark);
                 free(mark);
@@ -1196,7 +1195,7 @@ static bline_t* _buffer_bline_break(bline_t* bline, bint_t col) {
     // Move marks at or past col to new_line
     DL_FOREACH_SAFE(bline->marks, mark, mark_tmp) {
         if (mark->col >= col) {
-            MLBUF_MARK_MOVE(mark, new_line, mark->col - col, 1, 0);
+            _mark_mark_move_inner(mark, new_line, mark->col - col, 1, 0);
         }
     }
 

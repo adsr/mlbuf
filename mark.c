@@ -53,7 +53,7 @@ int mark_delete_before(mark_t* self, bint_t num_chars) {
 int mark_move_to(mark_t* self, bint_t line_index, bint_t col) {
     bline_t* bline;
     buffer_get_bline(self->bline->buffer, line_index, &bline);
-    MLBUF_MARK_MOVE(self, bline, col, 1, 1);
+    _mark_mark_move_inner(self, bline, col, 1, 1);
     return MLBUF_OK;
 }
 
@@ -90,37 +90,37 @@ int mark_move_vert(mark_t* self, bint_t line_delta) {
     if (cur_line == self->bline) {
         return MLBUF_OK;
     }
-    MLBUF_MARK_MOVE(self, cur_line, self->target_col, 0, 1);
+    _mark_mark_move_inner(self, cur_line, self->target_col, 0, 1);
     return MLBUF_OK;
 }
 
 // Move mark to beginning of line
 int mark_move_bol(mark_t* self) {
-    MLBUF_MARK_SET_COL(self, 0, 1, 1);
+    _mark_mark_move_inner(self, self->bline, 0, 1, 1);
     return MLBUF_OK;
 }
 
 // Move mark to end of line
 int mark_move_eol(mark_t* self) {
-    MLBUF_MARK_SET_COL(self, self->bline->char_count, 1, 1);
+    _mark_mark_move_inner(self, self->bline, self->bline->char_count, 1, 1);
     return MLBUF_OK;
 }
 
 // Move mark to a column on the current line
 int mark_move_col(mark_t* self, bint_t col) {
-    MLBUF_MARK_SET_COL(self, col, 1, 1);
+    _mark_mark_move_inner(self, self->bline, col, 1, 1);
     return MLBUF_OK;
 }
 
 // Move mark to beginning of buffer
 int mark_move_beginning(mark_t* self) {
-    MLBUF_MARK_MOVE(self, self->bline->buffer->first_line, 0, 1, 1);
+    _mark_mark_move_inner(self, self->bline->buffer->first_line, 0, 1, 1);
     return MLBUF_OK;
 }
 
 // Move mark to end of buffer
 int mark_move_end(mark_t* self) {
-    MLBUF_MARK_MOVE(self, self->bline->buffer->last_line, self->bline->buffer->last_line->char_count, 1, 1);
+    _mark_mark_move_inner(self, self->bline->buffer->last_line, self->bline->buffer->last_line->char_count, 1, 1);
     return MLBUF_OK;
 }
 
@@ -129,7 +129,7 @@ int mark_move_offset(mark_t* self, bint_t offset) {
     bline_t* dest_line;
     bint_t dest_col;
     buffer_get_bline_col(self->bline->buffer, offset, &dest_line, &dest_col);
-    MLBUF_MARK_MOVE(self, dest_line, dest_col, 1, 1);
+    _mark_mark_move_inner(self, dest_line, dest_col, 1, 1);
     return MLBUF_OK;
 }
 
@@ -355,7 +355,7 @@ int mark_get_between_mark(mark_t* self, mark_t* other, char** ret_str, bint_t* r
 
 // Move self to other
 int mark_join(mark_t* self, mark_t* other) {
-    MLBUF_MARK_MOVE(self, other->bline, other->col, 1, 1);
+    _mark_mark_move_inner(self, other->bline, other->col, 1, 1);
     return MLBUF_OK;
 }
 
@@ -364,8 +364,8 @@ int mark_swap_with_mark(mark_t* self, mark_t* other) {
     mark_t tmp_mark;
     tmp_mark.bline = other->bline;
     tmp_mark.col = other->col;
-    MLBUF_MARK_MOVE(other, self->bline, self->col, 1, 1);
-    MLBUF_MARK_MOVE(self, tmp_mark.bline, tmp_mark.col, 1, 1);
+    _mark_mark_move_inner(other, self->bline, self->col, 1, 1);
+    _mark_mark_move_inner(self, tmp_mark.bline, tmp_mark.col, 1, 1);
     return MLBUF_OK;
 }
 
@@ -390,7 +390,7 @@ int mark_destroy(mark_t* self) {
     bint_t col; \
     bint_t char_count; \
     if ((rc = (findfn)((mark), __VA_ARGS__, &line, &col, &char_count)) == MLBUF_OK) { \
-        MLBUF_MARK_MOVE((mark), line, col, 1, 1); \
+        _mark_mark_move_inner((mark), line, col, 1, 1); \
         return MLBUF_OK; \
     } \
     return rc;
@@ -526,6 +526,48 @@ static int mark_find_match(mark_t* self, mark_find_match_fn matchfn, void* u1, v
         }
     }
     return MLBUF_ERR;
+}
+
+// Move mark to target:col, setting target_col if do_set_target is truthy,
+// restyling if do_style is truthy
+void _mark_mark_move_inner(mark_t* mark, bline_t* bline_target, bint_t col, int do_set_target, int do_style) {
+    bline_t* bline_orig;
+    bline_t* bline_other;
+    bline_t* bline_min;
+    bline_t* bline_max;
+    int is_changing_line;
+    do_style = do_style && mark->range_srule ? 1 : 0;
+    is_changing_line = mark->bline != bline_target ? 1 : 0;
+    if (do_style) {
+        bline_orig = mark->bline;
+        bline_other = mark == mark->range_srule->range_a
+            ? mark->range_srule->range_b->bline
+            : mark->range_srule->range_a->bline;
+    }
+    if (is_changing_line) {
+        DL_DELETE(mark->bline->marks, mark);
+        mark->bline = bline_target;
+    }
+    mark->col = MLBUF_MIN(mark->bline->char_count, MLBUF_MAX(0, col));
+    if (do_set_target) {
+        mark->target_col = mark->col;
+    }
+    if (is_changing_line) {
+        DL_APPEND(bline_target->marks, mark);
+    }
+    if (do_style) {
+        bline_min = bline_orig;
+        if (bline_other->line_index < bline_min->line_index) bline_min = bline_other;
+        if (bline_target->line_index < bline_min->line_index) bline_min = bline_target;
+        bline_max = bline_orig;
+        if (bline_other->line_index > bline_max->line_index) bline_max = bline_other;
+        if (bline_target->line_index > bline_max->line_index) bline_max = bline_target;
+        buffer_apply_styles(
+            bline_min->buffer,
+            bline_min,
+            (bline_max->line_index - bline_min->line_index) + 1
+        );
+    }
 }
 
 // Return the last occurrence of a match given a forward-searching matchfn

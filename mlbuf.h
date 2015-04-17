@@ -98,7 +98,7 @@ struct mark_s {
     bline_t* bline;
     bint_t col;
     bint_t target_col;
-    int is_in_range_srule;
+    srule_t* range_srule;
     char letter;
     mark_t* next;
     mark_t* prev;
@@ -219,6 +219,7 @@ int utf8_unicode_to_char(char *out, uint32_t c);
 
 // util functions
 void* recalloc(void* ptr, size_t orig_num, size_t new_num, size_t el_size);
+void _mark_mark_move_inner(mark_t* mark, bline_t* bline_target, bint_t col, int do_set_target, int do_style);
 
 // Macros
 #define MLBUF_DEBUG 1
@@ -237,19 +238,6 @@ void* recalloc(void* ptr, size_t orig_num, size_t new_num, size_t el_size);
 #define MLBUF_MAX(a,b) (((a)>(b)) ? (a) : (b))
 
 #define MLBUF_BLINE_DATA_STOP(bline) ((bline)->data + ((bline)->data_len))
-
-#define MLBUF_MARK_MOVE(pmark, ptarget, pcol, psettarg, pstyle) do { \
-    DL_DELETE((pmark)->bline->marks, (pmark)); \
-    (pmark)->bline = (ptarget); \
-    MLBUF_MARK_SET_COL((pmark), (pcol), (psettarg), (pstyle)); \
-    DL_APPEND((ptarget)->marks, (pmark)); \
-} while(0)
-
-#define MLBUF_MARK_SET_COL(pmark, pcol, psettarg, pstyle) do { \
-    (pmark)->col = MLBUF_MIN((pmark)->bline->char_count, MLBUF_MAX(0, (pcol))); \
-    if (psettarg) (pmark)->target_col = (pmark)->col; \
-    if ((pstyle) && (pmark)->is_in_range_srule) buffer_apply_styles((pmark)->bline->buffer, (pmark)->bline->buffer->first_line, (pmark)->bline->buffer->line_count); \
-} while(0)
 
 #define MLBUF_DEBUG_PRINTF(fmt, ...) do { \
     if (MLBUF_DEBUG) { \

@@ -202,8 +202,7 @@ int mark_find_bracket_top(mark_t* self, bint_t max_chars, bline_t** ret_line, bi
     static char pairs[8] = { // TODO define these once somewhere
         '[', ']',
         '(', ')',
-        '{', '}',
-        '<', '>'
+        '{', '}'
     };
     cur_line = self->bline;
     col = self->col;
@@ -250,8 +249,7 @@ int mark_find_bracket_pair(mark_t* self, bint_t max_chars, bline_t** ret_line, b
     static char pairs[8] = {
         '[', ']',
         '(', ')',
-        '{', '}',
-        '<', '>'
+        '{', '}'
     };
     // If we're at eol, there's nothing to match
     if (self->col >= self->bline->char_count) {

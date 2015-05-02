@@ -11,6 +11,7 @@
 #include "mlbuf.h"
 #include "utlist.h"
 
+static void _buffer_stat(buffer_t* self);
 static int _buffer_baction_do(buffer_t* self, bline_t* bline, baction_t* action, int is_redo, bint_t* opt_repeat_offset);
 static int _buffer_update(buffer_t* self, baction_t* action);
 static int _buffer_truncate_undo_stack(buffer_t* self, baction_t* action_from);
@@ -100,6 +101,9 @@ int buffer_open(buffer_t* self, char* opath, int opath_len) {
         free(path);
     }
 
+    // Remember stat
+    _buffer_stat(self);
+
     // Unmap and close file
     munmap(buffer, st.st_size);
     close(fd);
@@ -142,6 +146,9 @@ int buffer_save_as(buffer_t* self, char* opath, int opath_len) {
     if (self->path) free(self->path);
     self->path = path;
     self->is_unsaved = 0;
+
+    // Remember stat
+    _buffer_stat(self);
 
     // Close file
     fclose(fp);
@@ -837,6 +844,12 @@ uintmax_t buffer_hash(buffer_t* self) {
     return hash;
 }
 
+static void _buffer_stat(buffer_t* self) {
+    if (!self->path) {
+        return;
+    }
+    stat(self->path, &self->st); // TODO err?
+}
 
 static int _buffer_baction_do(buffer_t* self, bline_t* bline, baction_t* action, int is_redo, bint_t* opt_repeat_offset) {
     int rc;

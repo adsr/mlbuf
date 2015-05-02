@@ -3,6 +3,9 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <pcre.h>
 #include "utlist.h"
 
@@ -31,6 +34,7 @@ struct buffer_s {
     baction_t* action_tail;
     baction_t* action_undone;
     char* path;
+    struct stat st;
     int is_unsaved;
     char *data;
     bint_t data_len;

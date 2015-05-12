@@ -19,7 +19,7 @@ typedef struct srule_s srule_t; // A style rule
 typedef struct srule_node_s srule_node_t; // A node in a list of style rules
 typedef struct sblock_s sblock_t; // A style of a particular character
 typedef void (*buffer_callback_t)(buffer_t* buffer, baction_t* action, void* udata);
-typedef ssize_t bint_t;
+typedef intmax_t bint_t;
 
 // buffer_t
 struct buffer_s {

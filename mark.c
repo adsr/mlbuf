@@ -530,17 +530,13 @@ static int mark_find_match(mark_t* self, mark_find_match_fn matchfn, void* u1, v
 // restyling if do_style is truthy
 void _mark_mark_move_inner(mark_t* mark, bline_t* bline_target, bint_t col, int do_set_target, int do_style) {
     bline_t* bline_orig;
-    bline_t* bline_other;
-    bline_t* bline_min;
-    bline_t* bline_max;
     int is_changing_line;
+    bline_t* bline_restyle;
+    bint_t min_restylelines;
     do_style = do_style && mark->range_srule ? 1 : 0;
     is_changing_line = mark->bline != bline_target ? 1 : 0;
     if (do_style) {
         bline_orig = mark->bline;
-        bline_other = mark == mark->range_srule->range_a
-            ? mark->range_srule->range_b->bline
-            : mark->range_srule->range_a->bline;
     }
     if (is_changing_line) {
         DL_DELETE(mark->bline->marks, mark);
@@ -554,16 +550,17 @@ void _mark_mark_move_inner(mark_t* mark, bline_t* bline_target, bint_t col, int 
         DL_APPEND(bline_target->marks, mark);
     }
     if (do_style) {
-        bline_min = bline_orig;
-        if (bline_other->line_index < bline_min->line_index) bline_min = bline_other;
-        if (bline_target->line_index < bline_min->line_index) bline_min = bline_target;
-        bline_max = bline_orig;
-        if (bline_other->line_index > bline_max->line_index) bline_max = bline_other;
-        if (bline_target->line_index > bline_max->line_index) bline_max = bline_target;
+        if (bline_target->line_index > bline_orig->line_index) {
+            bline_restyle = bline_orig;
+            min_restylelines = (bline_target->line_index - bline_orig->line_index) + 1;
+        } else {
+            bline_restyle = bline_target;
+            min_restylelines = (bline_orig->line_index - bline_target->line_index) + 1;
+        }
         buffer_apply_styles(
-            bline_min->buffer,
-            bline_min,
-            (bline_max->line_index - bline_min->line_index) + 1
+            bline_restyle->buffer,
+            bline_restyle,
+            min_restylelines
         );
     }
 }

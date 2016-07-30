@@ -121,6 +121,8 @@ struct srule_s {
     char* re_end;
     pcre* cre;
     pcre* cre_end;
+    pcre_extra* crex;
+    pcre_extra* crex_end;
     mark_t* range_a;
     mark_t* range_b;
     sblock_t style;

@@ -1062,11 +1062,10 @@ static int _buffer_bline_apply_style_single(srule_t* srule, bline_t* bline) {
     bint_t start;
     bint_t stop;
     bint_t look_offset;
-    MLBUF_INIT_PCRE_EXTRA(pcre_extra);
     look_offset = 0;
 
     while (look_offset < bline->data_len) {
-        if ((rc = pcre_exec(srule->cre, &pcre_extra, bline->data, bline->data_len, look_offset, 0, substrs, 3)) >= 0) {
+        if ((rc = pcre_exec(srule->cre, srule->crex, bline->data, bline->data_len, look_offset, 0, substrs, 3)) >= 0) {
             if (substrs[1] < 0) {
                 // substrs[0..1] can be -1 sometimes, See http://pcre.org/pcre.txt
                 break;
@@ -1414,6 +1413,7 @@ srule_t* srule_new_single(char* re, bint_t re_len, int caseless, uint16_t fg, ui
         srule_destroy(rule);
         return NULL;
     }
+    rule->crex = pcre_study(rule->cre, PCRE_STUDY_JIT_COMPILE, &re_error);
     return rule;
 }
 
@@ -1437,6 +1437,8 @@ srule_t* srule_new_multi(char* re, bint_t re_len, char* re_end, bint_t re_end_le
         srule_destroy(rule);
         return NULL;
     }
+    rule->crex = pcre_study(rule->cre, PCRE_STUDY_JIT_COMPILE, &re_error);
+    rule->crex_end = pcre_study(rule->cre_end, PCRE_STUDY_JIT_COMPILE, &re_error);
     return rule;
 }
 
@@ -1458,6 +1460,8 @@ int srule_destroy(srule_t* srule) {
     if (srule->re_end) free(srule->re_end);
     if (srule->cre) pcre_free(srule->cre);
     if (srule->cre_end) pcre_free(srule->cre_end);
+    if (srule->crex) pcre_free_study(srule->crex);
+    if (srule->crex_end) pcre_free_study(srule->crex_end);
     free(srule);
     return MLBUF_OK;
 }
@@ -1465,10 +1469,10 @@ int srule_destroy(srule_t* srule) {
 static int _srule_multi_find(srule_t* rule, int find_end, bline_t* bline, bint_t start_offset, bint_t* ret_start, bint_t* ret_stop) {
     int rc;
     pcre* cre;
+    pcre_extra* crex;
     int substrs[3];
     bint_t start_index;
     mark_t* mark;
-    MLBUF_INIT_PCRE_EXTRA(pcre_extra);
 
     if (rule->type == MLBUF_SRULE_TYPE_RANGE) {
         mark = mark_is_gt(rule->range_a, rule->range_b)
@@ -1484,8 +1488,9 @@ static int _srule_multi_find(srule_t* rule, int find_end, bline_t* bline, bint_t
 
     // MLBUF_SRULE_TYPE_MULTI
     cre = find_end ? rule->cre_end : rule->cre;
+    crex = find_end ? rule->crex_end : rule->crex;
     start_index = _buffer_bline_col_to_index(bline, start_offset);
-    if ((rc = pcre_exec(cre, &pcre_extra, bline->data, bline->data_len, start_index, 0, substrs, 3)) >= 0) {
+    if ((rc = pcre_exec(cre, crex, bline->data, bline->data_len, start_index, 0, substrs, 3)) >= 0) {
         *ret_start = _buffer_bline_index_to_col(bline, substrs[0]);
         *ret_stop = _buffer_bline_index_to_col(bline, substrs[1]);
         return 1;

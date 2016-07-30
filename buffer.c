@@ -1460,8 +1460,8 @@ int srule_destroy(srule_t* srule) {
     if (srule->re_end) free(srule->re_end);
     if (srule->cre) pcre_free(srule->cre);
     if (srule->cre_end) pcre_free(srule->cre_end);
-    if (srule->crex) pcre_free_study(srule->crex);
-    if (srule->crex_end) pcre_free_study(srule->crex_end);
+    if (srule->crex) pcre_free_study_ex(srule->crex);
+    if (srule->crex_end) pcre_free_study_ex(srule->crex_end);
     free(srule);
     return MLBUF_OK;
 }

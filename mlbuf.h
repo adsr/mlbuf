@@ -258,4 +258,14 @@ void _mark_mark_move_inner(mark_t* mark, bline_t* bline_target, bint_t col, int 
 #define MLBUF_INIT_PCRE_EXTRA(n) \
     pcre_extra n = { .flags = PCRE_EXTRA_MATCH_LIMIT_RECURSION, .match_limit_recursion = 256 }
 
+#ifndef PCRE_STUDY_JIT_COMPILE
+#define PCRE_STUDY_JIT_COMPILE 0
+#endif
+
+#ifdef PCRE_CONFIG_JIT
+#define pcre_free_study_ex pcre_free_study
+#else
+#define pcre_free_study_ex pcre_free
+#endif
+
 #endif

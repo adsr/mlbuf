@@ -2,16 +2,12 @@
 
 // Insert data on a line
 int bline_insert(bline_t* self, bint_t col, char* data, bint_t data_len, bint_t* ret_num_chars) {
-    bint_t offset;
-    buffer_get_offset(self->buffer, self, col, &offset);
-    return buffer_insert(self->buffer, offset, data, data_len, ret_num_chars);
+    return buffer_insert_w_bline(self->buffer, self, col, data, data_len, ret_num_chars);
 }
 
 // Delete data from a line
 int bline_delete(bline_t* self, bint_t col, bint_t num_chars) {
-    bint_t offset;
-    buffer_get_offset(self->buffer, self, col, &offset);
-    return buffer_delete(self->buffer, offset, num_chars);
+    return buffer_delete_w_bline(self->buffer, self, col, num_chars);
 }
 
 // Return a col given a byte index

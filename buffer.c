@@ -258,11 +258,23 @@ int buffer_set(buffer_t* self, char* data, bint_t data_len) {
     return rc;
 }
 
-// Insert data into buffer
+// Insert data into buffer given a buffer offset
 int buffer_insert(buffer_t* self, bint_t offset, char* data, bint_t data_len, bint_t* optret_num_chars) {
     int rc;
     bline_t* start_line;
     bint_t start_col;
+    MLBUF_MAKE_GT_EQ0(offset);
+
+    // Find start line and col
+    if ((rc = buffer_get_bline_col(self, offset, &start_line, &start_col)) != MLBUF_OK) {
+        return rc;
+    }
+
+    return buffer_insert_w_bline(self, start_line, start_col, data, data_len, optret_num_chars);
+}
+
+// Insert data into buffer given a bline/col
+int buffer_insert_w_bline(buffer_t* self, bline_t* start_line, bint_t start_col, char* data, bint_t data_len, bint_t* optret_num_chars) {
     bline_t* cur_line;
     bint_t cur_col;
     bline_t* new_line;
@@ -275,17 +287,11 @@ int buffer_insert(buffer_t* self, bint_t offset, char* data, bint_t data_len, bi
     bint_t ins_data_len;
     bint_t ins_data_nchars;
     baction_t* action;
-    MLBUF_MAKE_GT_EQ0(offset);
     MLBUF_MAKE_GT_EQ0(data_len);
 
     // Exit early if no data
     if (data_len < 1) {
         return MLBUF_OK;
-    }
-
-    // Find start line and col
-    if ((rc = buffer_get_bline_col(self, offset, &start_line, &start_col)) != MLBUF_OK) {
-        return rc;
     }
 
     // Insert lines
@@ -334,12 +340,20 @@ int buffer_insert(buffer_t* self, bint_t offset, char* data, bint_t data_len, bi
     return MLBUF_OK;
 }
 
-// Delete data from buffer
+// Delete data from buffer given an offset
 int buffer_delete(buffer_t* self, bint_t offset, bint_t num_chars) {
     bline_t* start_line;
     bint_t start_col;
+    MLBUF_MAKE_GT_EQ0(offset);
+    buffer_get_bline_col(self, offset, &start_line, &start_col);
+    return buffer_delete_w_bline(self, start_line, start_col, num_chars);
+}
+
+// Delete data from buffer given a bline/col
+int buffer_delete_w_bline(buffer_t* self, bline_t* start_line, bint_t start_col, bint_t num_chars) {
     bline_t* end_line;
     bint_t end_col;
+    bint_t num_chars_rem;
     bline_t* tmp_line;
     bline_t* swap_line;
     bline_t* next_line;
@@ -351,12 +365,22 @@ int buffer_delete(buffer_t* self, bint_t offset, bint_t num_chars) {
     bint_t safe_num_chars;
     bint_t orig_char_count;
     baction_t* action;
-    MLBUF_MAKE_GT_EQ0(offset);
     MLBUF_MAKE_GT_EQ0(num_chars);
 
-    // Find start/end line and col
-    buffer_get_bline_col(self, offset, &start_line, &start_col);
-    buffer_get_bline_col(self, offset + num_chars, &end_line, &end_col);
+    // Find end line and col
+    end_line = start_line;
+    end_col = start_col;
+    num_chars_rem = num_chars;
+    while (num_chars_rem > 0 && end_line) {
+        if (end_line->char_count - end_col >= num_chars_rem) {
+            end_col += num_chars_rem;
+            num_chars_rem = 0;
+        } else {
+            num_chars_rem -= end_line->char_count + 1;
+            end_line = end_line->next;
+            end_col = 0;
+        }
+    }
 
     // Exit early if there is nothing to delete
     if (start_line == end_line && start_col >= end_col) {
@@ -884,13 +908,15 @@ static int _buffer_update(buffer_t* self, baction_t* action) {
     self->is_unsaved = 1;
 
     // Renumber lines
-    last_line = NULL;
-    new_line_index = action->start_line->line_index;
-    for (tmp_line = action->start_line->next; tmp_line != NULL; tmp_line = tmp_line->next) {
-        tmp_line->line_index = ++new_line_index;
-        last_line = tmp_line;
+    if (action->line_delta != 0) {
+        last_line = NULL;
+        new_line_index = action->start_line->line_index;
+        for (tmp_line = action->start_line->next; tmp_line != NULL; tmp_line = tmp_line->next) {
+            tmp_line->line_index = ++new_line_index;
+            last_line = tmp_line;
+        }
+        self->last_line = last_line ? last_line : action->start_line;
     }
-    self->last_line = last_line ? last_line : action->start_line;
 
     // Restyle from start_line
     buffer_apply_styles(self, action->start_line, action->line_delta);

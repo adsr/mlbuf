@@ -23,4 +23,8 @@ MAIN("hello\nworld",
     bline_delete(buf->first_line, 4, 1);
     buffer_get(buf, &data, &data_len);
     ASSERT("oob", 0, strncmp(data, "eo\nwrl", data_len));
+
+    bline_delete(buf->first_line, 2, 3);
+    buffer_get(buf, &data, &data_len);
+    ASSERT("eatnl", 0, strncmp(data, "eol", data_len));
 )

@@ -376,7 +376,7 @@ int buffer_delete_w_bline(buffer_t* self, bline_t* start_line, bint_t start_col,
             end_col += num_chars_rem;
             num_chars_rem = 0;
         } else {
-            num_chars_rem -= end_line->char_count + 1;
+            num_chars_rem -= (end_line->char_count - end_col) + 1;
             if (end_line->next) {
                 end_line = end_line->next;
                 end_col = 0;

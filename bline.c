@@ -1,12 +1,27 @@
 #include "mlbuf.h"
 
+// Move self/col forward until col fits exists on current line
+static void _bline_advance_col(bline_t** self, bint_t* col) {
+    while (*col > (*self)->char_count) {
+        if ((*self)->next) {
+            *col -= (*self)->char_count + 1;
+            *self = (*self)->next;
+        } else {
+            *col = (*self)->char_count;
+            break;
+        }
+    }
+}
+
 // Insert data on a line
 int bline_insert(bline_t* self, bint_t col, char* data, bint_t data_len, bint_t* ret_num_chars) {
+    _bline_advance_col(&self, &col);
     return buffer_insert_w_bline(self->buffer, self, col, data, data_len, ret_num_chars);
 }
 
 // Delete data from a line
 int bline_delete(bline_t* self, bint_t col, bint_t num_chars) {
+    _bline_advance_col(&self, &col);
     return buffer_delete_w_bline(self->buffer, self, col, num_chars);
 }
 

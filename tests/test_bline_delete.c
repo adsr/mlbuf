@@ -19,4 +19,8 @@ MAIN("hello\nworld",
     bline_delete(buf->first_line, 1, 2);
     buffer_get(buf, &data, &data_len);
     ASSERT("mid", 0, strncmp(data, "eo\nworl", data_len));
+
+    bline_delete(buf->first_line, 4, 1);
+    buffer_get(buf, &data, &data_len);
+    ASSERT("oob", 0, strncmp(data, "eo\nwrl", data_len));
 )

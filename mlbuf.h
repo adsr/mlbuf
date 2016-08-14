@@ -212,6 +212,7 @@ int mark_is_at_bol(mark_t* self);
 int mark_is_at_word_bound(mark_t* self, int side);
 uint32_t mark_get_char_after(mark_t* self);
 uint32_t mark_get_char_before(mark_t* self);
+int mark_set_pcre_capture(int* rc, int* ovector, int ovector_size);
 int mark_destroy(mark_t* self);
 
 // srule functions

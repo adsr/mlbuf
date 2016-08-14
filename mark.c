@@ -13,6 +13,10 @@ static char* mark_find_prev_str_matchfn(char* haystack, bint_t haystack_len, bin
 static char* mark_find_next_cre_matchfn(char* haystack, bint_t haystack_len, bint_t look_offset, bint_t max_offset, void* cre, void* unused, bint_t* ret_needle_len);
 static char* mark_find_prev_cre_matchfn(char* haystack, bint_t haystack_len, bint_t look_offset, bint_t max_offset, void* cre, void* unused, bint_t* ret_needle_len);
 
+static int* pcre_ovector = NULL;
+static int pcre_ovector_size = 0;
+static int* pcre_rc;
+
 // Return a clone (same position) of an existing mark
 mark_t* mark_clone(mark_t* self) {
     mark_t* new_mark;
@@ -451,6 +455,25 @@ int mark_is_at_word_bound(mark_t* self, int side) {
     return 0;
 }
 
+// Set ovector for capturing substrs
+int mark_set_pcre_capture(int* rc, int* ovector, int ovector_size) {
+    if (rc == NULL || ovector == NULL || ovector_size == 0) {
+        rc = NULL;
+        pcre_ovector = NULL;
+        pcre_ovector_size = 0;
+        return MLBUF_OK;
+    } else if (rc != NULL && ovector != NULL && ovector_size >= 3 && ovector_size % 3 == 0) {
+        pcre_rc = rc;
+        pcre_ovector = ovector;
+        pcre_ovector_size = ovector_size;
+        return MLBUF_OK;
+    }
+    pcre_rc = NULL;
+    pcre_ovector = NULL;
+    pcre_ovector_size = 0;
+    return MLBUF_ERR;
+}
+
 // Return char after mark, or 0 if at eol.
 uint32_t mark_get_char_after(mark_t* self) {
     if (mark_is_at_eol(self)) {
@@ -601,7 +624,7 @@ static int mark_find_re(mark_t* self, char* re, bint_t re_len, int reverse, blin
     MLBUF_MAKE_GT_EQ0(re_len);
     regex = malloc(re_len + 1);
     snprintf(regex, re_len + 1, "%s", re);
-    cre = pcre_compile((const char*)regex, PCRE_NO_AUTO_CAPTURE | PCRE_CASELESS, &error, &erroffset, NULL);
+    cre = pcre_compile((const char*)regex, PCRE_CASELESS, &error, &erroffset, NULL);
     if (cre == NULL) {
         // TODO log error
         free(regex);
@@ -630,14 +653,26 @@ static char* mark_find_prev_str_matchfn(char* haystack, bint_t haystack_len, bin
 static char* mark_find_next_cre_matchfn(char* haystack, bint_t haystack_len, bint_t look_offset, bint_t max_offset, void* cre, void* unused, bint_t* ret_needle_len) {
     int rc;
     int substrs[3];
+    int* use_rc;
+    int* use_substrs;
+    int use_substrs_size;
     if (!haystack || haystack_len == 0) {
         haystack = "";
         haystack_len = 0;
     }
+    if (pcre_ovector) {
+        use_substrs = pcre_ovector;
+        use_substrs_size = pcre_ovector_size;
+        use_rc = pcre_rc;
+    } else {
+        use_substrs = substrs;
+        use_substrs_size = 3;
+        use_rc = &rc;
+    }
     MLBUF_INIT_PCRE_EXTRA(pcre_extra);
-    if ((rc = pcre_exec((pcre*)cre, &pcre_extra, haystack, haystack_len, look_offset, 0, substrs, 3)) >= 0) {
-        if (ret_needle_len) *ret_needle_len = (bint_t)(substrs[1] - substrs[0]);
-        return haystack + substrs[0];
+    if ((*use_rc = pcre_exec((pcre*)cre, &pcre_extra, haystack, haystack_len, look_offset, 0, use_substrs, use_substrs_size)) >= 0) {
+        if (ret_needle_len) *ret_needle_len = (bint_t)(use_substrs[1] - use_substrs[0]);
+        return haystack + use_substrs[0];
     }
     return NULL;
 }

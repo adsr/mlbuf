@@ -500,6 +500,7 @@ static int mark_find_match(mark_t* self, mark_find_match_fn matchfn, void* u1, v
     bint_t match_col_end = 0;
     bint_t max_offset = 0;
     bint_t match_len = 0;
+    int budge;
     search_line = self->bline;
     *ret_line = NULL;
     if (reverse) {
@@ -508,7 +509,6 @@ static int mark_find_match(mark_t* self, mark_find_match_fn matchfn, void* u1, v
             search_line = search_line->prev;
             if (!search_line) return MLBUF_ERR;
             look_offset = 0;
-            //max_offset = search_line->data_len - 1;
             max_offset = search_line->data_len;
         } else {
             look_offset = 0;
@@ -521,11 +521,13 @@ static int mark_find_match(mark_t* self, mark_find_match_fn matchfn, void* u1, v
             search_line = search_line->next;
             if (!search_line) return MLBUF_ERR;
             look_offset = 0;
-            //max_offset = search_line->data_len - 1;
             max_offset = search_line->data_len;
         } else {
-            look_offset = self->col + 1 < search_line->char_count ? search_line->chars[self->col + 1].index : search_line->data_len;
-            //max_offset = search_line->data_len - 1;
+            // Normally we only look at matches after the current mark col
+            // (self->col+1), but this prevents us from ever matching the first
+            // char of the buffer, so we make a special case there.
+            budge = (self->bline->line_index == 0 && self->col == 0) ? 0 : 1;
+            look_offset = self->col + budge < search_line->char_count ? search_line->chars[self->col + budge].index : search_line->data_len;
             max_offset = search_line->data_len;
         }
     }

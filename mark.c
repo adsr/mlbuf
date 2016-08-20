@@ -18,10 +18,9 @@ static int pcre_ovector_size = 0;
 static int* pcre_rc;
 
 // Return a clone (same position) of an existing mark
-mark_t* mark_clone(mark_t* self) {
-    mark_t* new_mark;
-    new_mark = buffer_add_mark(self->bline->buffer, self->bline, self->col);
-    return new_mark;
+int mark_clone(mark_t* self, mark_t** ret_mark) {
+    *ret_mark = buffer_add_mark(self->bline->buffer, self->bline, self->col);
+    return MLBUF_OK;
 }
 
 // Insert data before mark
@@ -475,19 +474,23 @@ int mark_set_pcre_capture(int* rc, int* ovector, int ovector_size) {
 }
 
 // Return char after mark, or 0 if at eol.
-uint32_t mark_get_char_after(mark_t* self) {
+int mark_get_char_after(mark_t* self, uint32_t* ret_char) {
     if (mark_is_at_eol(self)) {
-        return 0;
+        *ret_char = 0;
+    } else {
+        *ret_char = self->bline->chars[self->col].ch;
     }
-    return self->bline->chars[self->col].ch;
+    return MLBUF_OK;
 }
 
 // Return char before mark, or 0 if at bol.
-uint32_t mark_get_char_before(mark_t* self) {
+int mark_get_char_before(mark_t* self, uint32_t* ret_char) {
     if (mark_is_at_bol(self)) {
-        return 0;
+        *ret_char = 0;
+    } else {
+        *ret_char = self->bline->chars[self->col - 1].ch;
     }
-    return self->bline->chars[self->col - 1].ch;
+    return MLBUF_OK;
 }
 
 // Find first occurrence of match according to matchfn. Search backwards if

@@ -169,7 +169,7 @@ int bline_delete(bline_t* self, bint_t col, bint_t num_chars);
 int bline_get_col(bline_t* self, bint_t index, bint_t* ret_col);
 
 // mark functions
-mark_t* mark_clone(mark_t* self);
+int mark_clone(mark_t* self, mark_t** ret_mark);
 int mark_insert_before(mark_t* self, char* data, bint_t data_len);
 int mark_insert_after(mark_t* self, char* data, bint_t data_len);
 int mark_delete_before(mark_t* self, bint_t num_chars);
@@ -210,8 +210,8 @@ int mark_swap_with_mark(mark_t* self, mark_t* other);
 int mark_is_at_eol(mark_t* self);
 int mark_is_at_bol(mark_t* self);
 int mark_is_at_word_bound(mark_t* self, int side);
-uint32_t mark_get_char_after(mark_t* self);
-uint32_t mark_get_char_before(mark_t* self);
+int mark_get_char_after(mark_t* self, uint32_t* ret_char);
+int mark_get_char_before(mark_t* self, uint32_t* ret_char);
 int mark_set_pcre_capture(int* rc, int* ovector, int ovector_size);
 int mark_destroy(mark_t* self);
 

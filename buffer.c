@@ -112,11 +112,11 @@ int buffer_open(buffer_t* self, char* opath, int opath_len) {
 
 // Write buffer to path
 int buffer_save(buffer_t* self) {
-    return buffer_save_as(self, self->path, self->path ? strlen(self->path) : 0);
+    return buffer_save_as(self, self->path, self->path ? strlen(self->path) : 0, NULL);
 }
 
 // Write buffer to specified path
-int buffer_save_as(buffer_t* self, char* opath, int opath_len) {
+int buffer_save_as(buffer_t* self, char* opath, int opath_len, bint_t* optret_nbytes) {
     char* path;
     FILE* fp;
     char *data;
@@ -140,6 +140,8 @@ int buffer_save_as(buffer_t* self, char* opath, int opath_len) {
         fclose(fp);
         free(path);
         return MLBUF_ERR;
+    } else {
+        if (optret_nbytes) *optret_nbytes = data_len;
     }
 
     // Set path

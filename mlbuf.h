@@ -58,20 +58,23 @@ struct bline_s {
     buffer_t* buffer;
     char* data;
     bint_t data_len;
-    bint_t* data_vcols;
     bint_t data_cap;
     bint_t line_index;
     bint_t char_count;
     bint_t char_vwidth;
     bline_char_t* chars;
     bint_t chars_cap;
-    sblock_t* char_styles;
-    bint_t char_styles_cap;
     mark_t* marks;
     srule_t* bol_rule;
     srule_t* eol_rule;
     bline_t* next;
     bline_t* prev;
+};
+
+// sblock_t
+struct sblock_s {
+    uint16_t fg;
+    uint16_t bg;
 };
 
 // bline_char_t
@@ -80,6 +83,8 @@ struct bline_char_s {
     int len;
     bint_t index;
     bint_t vcol;
+    bint_t index_to_vcol; // accessed via >chars[index], not >chars[char]
+    sblock_t style;
 };
 
 // baction_t
@@ -110,12 +115,6 @@ struct mark_s {
     char letter;
     mark_t* next;
     mark_t* prev;
-};
-
-// sblock_t
-struct sblock_s {
-    uint16_t fg;
-    uint16_t bg;
 };
 
 // srule_t

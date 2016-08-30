@@ -65,6 +65,7 @@ int buffer_open(buffer_t* self, char* opath, int opath_len) {
     char* path;
     int rc;
     struct stat st;
+    path = NULL;
 
     // Exit early if path is empty
     if (!opath || opath_len < 1) {
@@ -609,15 +610,15 @@ int buffer_debug_dump(buffer_t* self, FILE* stream) {
         }
         fprintf(stream, "    mark  %.*s\n", (int)(bline_tmp->char_count + 1), mark_str);
         fprintf(stream, "      fg  ");
-        if (bline_tmp->char_styles) {
+        if (bline_tmp->chars) {
             for (j = 0; j < bline_tmp->char_count; j++) {
-                fprintf(stream, "%c", bline_tmp->char_styles[j].fg ? '*' : ' ');
+                fprintf(stream, "%c", bline_tmp->chars[j].style.fg ? '*' : ' ');
             }
         }
         fprintf(stream, "\n      bg  ");
-        if (bline_tmp->char_styles) {
+        if (bline_tmp->chars) {
             for (j = 0; j < bline_tmp->char_count; j++) {
-                fprintf(stream, "%c", bline_tmp->char_styles[j].bg ? '*' : ' ');
+                fprintf(stream, "%c", bline_tmp->chars[j].style.bg ? '*' : ' ');
             }
         }
         fprintf(stream, "\n");
@@ -637,7 +638,6 @@ int buffer_debug_dump(buffer_t* self, FILE* stream) {
             }
         }
         fprintf(stream, "\n    chars_cap=%lu\n", bline_tmp->chars_cap);
-        fprintf(stream, "    char_styles_cap=%lu\n", bline_tmp->char_styles_cap);
     }
     fprintf(stream, "single_srules:\n");
     i = 0; DL_FOREACH(self->single_srules, srule_tmp) {
@@ -985,6 +985,7 @@ static int _buffer_apply_styles_singles(bline_t* start_line, bint_t min_nlines) 
     bline_t* cur_line;
     srule_node_t* srule_node;
     bint_t styled_nlines;
+    bint_t i;
 
     // Apply styles starting at start_line
     cur_line = start_line;
@@ -992,7 +993,9 @@ static int _buffer_apply_styles_singles(bline_t* start_line, bint_t min_nlines) 
     while (cur_line && styled_nlines < min_nlines) {
         if (cur_line->char_count > 0) {
             // Reset styles of cur_line
-            memset(cur_line->char_styles, 0, cur_line->char_count * sizeof(sblock_t));
+            for (i = 0; i < cur_line->char_count; i++) {
+                cur_line->chars[i].style = (sblock_t){0, 0};
+            }
 
             // Apply single-line styles to cur_line
             DL_FOREACH(start_line->buffer->single_srules, srule_node) {
@@ -1108,7 +1111,7 @@ static int _buffer_bline_apply_style_single(srule_t* srule, bline_t* bline) {
             start = _buffer_bline_index_to_col(bline, substrs[0]);
             stop = _buffer_bline_index_to_col(bline, substrs[1]);
             for (; start < stop; start++) {
-                bline->char_styles[start] = srule->style;
+                bline->chars[start].style = srule->style;
             }
             look_offset = MLBUF_MAX(substrs[1], look_offset + 1);
         } else {
@@ -1164,7 +1167,7 @@ static int _buffer_bline_apply_style_multi(srule_t* srule, bline_t* bline, srule
 
         // Write styles
         for (; start < end; start++) {
-            bline->char_styles[start] = srule->style;
+            bline->chars[start].style = srule->style;
         }
 
         // Range rules can only match once
@@ -1187,9 +1190,7 @@ static int _buffer_bline_free(bline_t* bline, bline_t* maybe_mark_line, bint_t c
     mark_t* mark;
     mark_t* mark_tmp;
     if (bline->data) free(bline->data);
-    if (bline->data_vcols) free(bline->data_vcols);
     if (bline->chars) free(bline->chars);
-    if (bline->char_styles) free(bline->char_styles);
     if (bline->marks) {
         DL_FOREACH_SAFE(bline->marks, mark, mark_tmp) {
             if (maybe_mark_line) {
@@ -1356,12 +1357,12 @@ static bint_t _buffer_bline_col_to_index(bline_t* bline, bint_t col) {
 }
 
 static bint_t _buffer_bline_index_to_col(bline_t* bline, bint_t index) {
-    if (!bline->data_vcols || index < 1) {
+    if (index < 1) {
         return 0;
     } else if (index >= bline->data_len) {
         return bline->char_count;
     }
-    return bline->data_vcols[index];
+    return bline->chars[index].index_to_vcol;
 }
 
 static int _buffer_bline_count_chars(bline_t* bline) {
@@ -1370,6 +1371,7 @@ static int _buffer_bline_count_chars(bline_t* bline) {
     uint32_t ch;
     int char_w;
     bint_t i;
+    int is_tabless_ascii;
 
     // Return early if there is no data
     if (bline->data_len < 1) {
@@ -1382,49 +1384,57 @@ static int _buffer_bline_count_chars(bline_t* bline) {
     // It should have data_len elements at most
     if (!bline->chars) {
         bline->chars = calloc(bline->data_len, sizeof(bline_char_t));
-        bline->data_vcols = malloc(bline->data_len * sizeof(bint_t));
         bline->chars_cap = bline->data_len;
     } else if (bline->data_len > bline->chars_cap) {
         bline->chars = recalloc(bline->chars, bline->chars_cap, bline->data_len, sizeof(bline_char_t));
-        bline->data_vcols = realloc(bline->data_vcols, bline->data_len * sizeof(bint_t));
         bline->chars_cap = bline->data_len;
     }
 
-    // Count utf8 chars, keep track of byte indexes and char vwidths
-    bline->char_count = 0;
-    bline->char_vwidth = 0;
-    for (c = bline->data; c < MLBUF_BLINE_DATA_STOP(bline); ) {
-        ch = 0;
-        char_len = utf8_char_to_unicode(&ch, c, MLBUF_BLINE_DATA_STOP(bline));
-        if (ch == '\t') {
-            // Special case for tabs
-            char_w = bline->buffer->tab_width - (bline->char_vwidth % bline->buffer->tab_width);
-        } else {
-            char_w = wcwidth(ch);
+    // Attempt shortcut for lines with all ascii and no tabs
+    is_tabless_ascii = 1;
+    c = bline->data;
+    i = 0;
+    while (c < MLBUF_BLINE_DATA_STOP(bline)) {
+        if ((*c & 0x80) || *c == '\t') {
+            is_tabless_ascii = 0;
+            break;
         }
-        // Let null and non-printable chars occupy 1 column
-        if (char_w < 1) char_w = 1;
-        if (char_len < 1) char_len = 1;
-        bline->chars[bline->char_count].ch = ch;
-        bline->chars[bline->char_count].len = char_len;
-        bline->chars[bline->char_count].index = (bint_t)(c - bline->data);
-        bline->chars[bline->char_count].vcol = bline->char_vwidth;
-        for (i = 0; i < char_len; i++) if ((c - bline->data) + i < bline->data_len) {
-            bline->data_vcols[(c - bline->data) + i] = bline->char_count;
-        }
-        bline->char_count += 1;
-        bline->char_vwidth += char_w;
-        c += char_len;
+        bline->chars[i].ch = *c;
+        bline->chars[i].len = 1;
+        bline->chars[i].index = i;
+        bline->chars[i].vcol = i;
+        bline->chars[i].index_to_vcol = i;
+        i++;
+        c++;
     }
+    bline->char_count = i;
+    bline->char_vwidth = i;
 
-    // Ensure space for char_styles
-    if (bline->char_count > 0) {
-        if (!bline->char_styles) {
-            bline->char_styles = calloc(bline->char_count, sizeof(sblock_t));
-            bline->char_styles_cap = bline->char_count;
-        } else if (bline->char_count > bline->char_styles_cap) {
-            bline->char_styles = recalloc(bline->char_styles, bline->char_styles_cap, bline->char_count, sizeof(sblock_t));
-            bline->char_styles_cap = bline->char_count;
+    if (!is_tabless_ascii) {
+        // We encountered either non-ascii or a tab above, so we have to do a
+        // little more work.
+        while (c < MLBUF_BLINE_DATA_STOP(bline)) {
+            ch = 0;
+            char_len = utf8_char_to_unicode(&ch, c, MLBUF_BLINE_DATA_STOP(bline));
+            if (ch == '\t') {
+                // Special case for tabs
+                char_w = bline->buffer->tab_width - (bline->char_vwidth % bline->buffer->tab_width);
+            } else {
+                char_w = wcwidth(ch);
+            }
+            // Let null and non-printable chars occupy 1 column
+            if (char_w < 1) char_w = 1;
+            if (char_len < 1) char_len = 1;
+            bline->chars[bline->char_count].ch = ch;
+            bline->chars[bline->char_count].len = char_len;
+            bline->chars[bline->char_count].index = (bint_t)(c - bline->data);
+            bline->chars[bline->char_count].vcol = bline->char_vwidth;
+            for (i = 0; i < char_len; i++) if ((c - bline->data) + i < bline->data_len) {
+                bline->chars[(c - bline->data) + i].index_to_vcol = bline->char_count;
+            }
+            bline->char_count += 1;
+            bline->char_vwidth += char_w;
+            c += char_len;
         }
     }
 

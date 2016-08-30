@@ -7,12 +7,12 @@ MAIN("hello\nworld",
     buffer_add_srule(buf, srule);
     buffer_remove_srule(buf, srule);
     for (i = 0; i < buf->first_line->char_count; i++) {
-        ASSERT("line1fg", 0, buf->first_line->char_styles[i].fg);
-        ASSERT("line1bg", 0, buf->first_line->char_styles[i].bg);
+        ASSERT("line1fg", 0, buf->first_line->chars[i].style.fg);
+        ASSERT("line1bg", 0, buf->first_line->chars[i].style.bg);
     }
     for (i = 0; i < buf->first_line->next->char_count; i++) {
-        ASSERT("line2fg", 0, buf->first_line->next->char_styles[i].fg);
-        ASSERT("line2bg", 0, buf->first_line->next->char_styles[i].bg);
+        ASSERT("line2fg", 0, buf->first_line->next->chars[i].style.fg);
+        ASSERT("line2bg", 0, buf->first_line->next->chars[i].style.bg);
     }
     srule_destroy(srule);
 )

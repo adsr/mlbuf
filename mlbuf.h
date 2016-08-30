@@ -43,6 +43,10 @@ struct buffer_s {
     int tab_width;
     buffer_callback_t callback;
     void* callback_udata;
+    int fd;
+    char* mmap;
+    size_t mmap_len;
+    int is_in_open;
     int is_in_callback;
     int is_style_disabled;
     char _mark_counter;

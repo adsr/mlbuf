@@ -32,6 +32,7 @@ static int _srule_multi_find(srule_t* rule, int find_end, bline_t* bline, bint_t
 static int _srule_multi_find_start(srule_t* rule, bline_t* bline, bint_t start_offset, bint_t* ret_start, bint_t* ret_stop);
 static int _srule_multi_find_end(srule_t* rule, bline_t* bline, bint_t start_offset, bint_t* ret_stop);
 static int _baction_destroy(baction_t* action);
+static int _buffer_close_handles(buffer_t* self);
 
 // Make a new buffer and return it
 buffer_t* buffer_new() {
@@ -63,51 +64,51 @@ buffer_t* buffer_new_open(char* path, int path_len) {
 int buffer_open(buffer_t* self, char* opath, int opath_len) {
     char* path;
     int rc;
-    int fd;
     struct stat st;
-    char* buffer;
 
     // Exit early if path is empty
     if (!opath || opath_len < 1) {
-        return MLBUF_ERR;
+        goto buffer_open_failure;
     }
 
     // Open file for reading
     path = strndup(opath, opath_len);
-    if ((fd = open(path, O_RDONLY)) < 0) {
-        free(path);
-        return MLBUF_ERR;
+    if ((self->fd = open(path, O_RDONLY)) < 0) {
+        goto buffer_open_failure;
     }
 
     // Get size
-    if (fstat(fd, &st) < 0) {
-        free(path);
-        return MLBUF_ERR;
+    if (fstat(self->fd, &st) < 0) {
+        goto buffer_open_failure;
     }
+    self->mmap_len = st.st_size;
 
     // Memory map file
-    buffer = mmap(0, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-    if (buffer == MAP_FAILED) {
-        free(path);
-        return MLBUF_ERR;
+    self->mmap = mmap(0, self->mmap_len, PROT_READ, MAP_PRIVATE, self->fd, 0);
+    if (self->mmap == MAP_FAILED) {
+        goto buffer_open_failure;
     }
 
     // Fill buffer
-    if ((rc = buffer_set(self, buffer, st.st_size)) == MLBUF_OK) {
-        if (self->path) free(self->path);
-        self->path = path;
-        self->is_unsaved = 0;
-    } else {
-        free(path);
+    self->is_in_open = 1;
+    if ((rc = buffer_set(self, self->mmap, (bint_t)self->mmap_len)) != MLBUF_OK) {
+        goto buffer_open_failure;
     }
+    self->is_in_open = 0;
 
     // Remember stat
     _buffer_stat(self);
 
-    // Unmap and close file
-    munmap(buffer, st.st_size);
-    close(fd);
-    return rc;
+    if (self->path) free(self->path);
+    self->path = path;
+    self->is_unsaved = 0;
+
+    return MLBUF_OK;
+
+buffer_open_failure:
+    _buffer_close_handles(self);
+    if (path) free(path);
+    return MLBUF_ERR;
 }
 
 // Write buffer to path
@@ -174,6 +175,7 @@ int buffer_destroy(buffer_t* self) {
         DL_DELETE(self->actions, action);
         _baction_destroy(action);
     }
+    _buffer_close_handles(self);
     free(self);
     return MLBUF_OK;
 }
@@ -1426,6 +1428,20 @@ static int _buffer_bline_count_chars(bline_t* bline) {
         }
     }
 
+    return MLBUF_OK;
+}
+
+// Close self->fd and self->mmap if needed
+static int _buffer_close_handles(buffer_t* self) {
+    if (self->fd) {
+        if (self->fd > 0) close(self->fd);
+        self->fd = 0;
+    }
+    if (self->mmap) {
+        if (self->mmap != MAP_FAILED) munmap(self->mmap, self->mmap_len);
+        self->mmap = NULL;
+    }
+    self->mmap_len = 0;
     return MLBUF_OK;
 }
 

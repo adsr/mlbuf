@@ -354,6 +354,7 @@ int buffer_set_slabbed(buffer_t* self, char* data, bint_t data_len) {
     self->last_line = blines + line_num;
     self->byte_count = data_len;
     self->line_count = line_num + 1;
+    self->is_data_dirty = 1;
     return MLBUF_OK;
 }
 

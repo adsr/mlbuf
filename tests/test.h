@@ -3,14 +3,16 @@
 #include <string.h>
 #include "../mlbuf.h"
 
+// TODO run each test with buffer_set_slabbed + buffer_insert
+
 #define MAIN(str, body) \
 int main(int argc, char **argv) { \
     buffer_t* buf; \
     mark_t* cur; \
     buf = buffer_new(); \
-    cur = buffer_add_mark(buf, NULL, 0); \
-    if (cur) { } \
     buffer_insert(buf, 0, (char*)str, (bint_t)strlen(str), NULL); \
+    cur = buffer_add_mark(buf, NULL, 0); \
+    (void)cur; \
     body \
     buffer_destroy(buf); \
     return EXIT_SUCCESS; \

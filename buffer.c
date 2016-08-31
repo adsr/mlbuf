@@ -10,6 +10,9 @@
 #include "mlbuf.h"
 #include "utlist.h"
 
+static int _buffer_open_mmap(buffer_t* self, int fd, size_t size);
+static int _buffer_open_read(buffer_t* self, int fd, size_t size);
+static int _buffer_bline_unslab(bline_t* self);
 static void _buffer_stat(buffer_t* self);
 static int _buffer_baction_do(buffer_t* self, bline_t* bline, baction_t* action, int is_redo, bint_t* opt_repeat_offset);
 static int _buffer_update(buffer_t* self, baction_t* action);
@@ -26,11 +29,11 @@ static bint_t _buffer_bline_insert(bline_t* bline, bint_t col, char* data, bint_
 static bint_t _buffer_bline_delete(bline_t* bline, bint_t col, bint_t num_chars);
 static bint_t _buffer_bline_col_to_index(bline_t* bline, bint_t col);
 static bint_t _buffer_bline_index_to_col(bline_t* bline, bint_t index);
+static int _buffer_munmap(buffer_t* self);
 static int _srule_multi_find(srule_t* rule, int find_end, bline_t* bline, bint_t start_offset, bint_t* ret_start, bint_t* ret_stop);
 static int _srule_multi_find_start(srule_t* rule, bline_t* bline, bint_t start_offset, bint_t* ret_start, bint_t* ret_stop);
 static int _srule_multi_find_end(srule_t* rule, bline_t* bline, bint_t start_offset, bint_t* ret_stop);
 static int _baction_destroy(baction_t* action);
-static int _buffer_close_handles(buffer_t* self);
 
 // Make a new buffer and return it
 buffer_t* buffer_new() {
@@ -42,16 +45,17 @@ buffer_t* buffer_new() {
     buffer->first_line = bline;
     buffer->last_line = bline;
     buffer->line_count = 1;
+    buffer->mmap_fd = -1;
     buffer->_mark_counter = 'a';
     return buffer;
 }
 
 // Wrapper for buffer_new + buffer_open
-buffer_t* buffer_new_open(char* path, int path_len) {
+buffer_t* buffer_new_open(char* path) {
     buffer_t* self;
     int rc;
     self = buffer_new();
-    if ((rc = buffer_open(self, path, path_len)) != MLBUF_OK) {
+    if ((rc = buffer_open(self, path)) != MLBUF_OK) {
         buffer_destroy(self);
         return NULL;
     }
@@ -59,114 +63,104 @@ buffer_t* buffer_new_open(char* path, int path_len) {
 }
 
 // Read buffer from path
-int buffer_open(buffer_t* self, char* opath, int opath_len) {
-    char* path;
+int buffer_open(buffer_t* self, char* path) {
     int rc;
     struct stat st;
-    path = NULL;
+    int fd;
+    fd = -1;
 
-    // Exit early if path is empty
-    if (!opath || opath_len < 1) {
-        goto buffer_open_failure;
-    }
+    rc = MLBUF_OK;
+    do {
+        // Exit early if path is empty
+        if (!path || strlen(path) < 1) {
+            rc = MLBUF_ERR;
+            break;
+        }
 
-    // Open file for reading
-    path = strndup(opath, opath_len);
-    if ((self->fd = open(path, O_RDONLY)) < 0) {
-        goto buffer_open_failure;
-    }
+        // Open file for reading
+        if ((fd = open(path, O_RDONLY)) < 0) {
+            rc = MLBUF_ERR;
+            break;
+        }
 
-    // Get size
-    if (fstat(self->fd, &st) < 0) {
-        goto buffer_open_failure;
-    }
-    self->mmap_len = st.st_size;
+        // Stat file
+        if (fstat(fd, &st) < 0) {
+            rc = MLBUF_ERR;
+            break;
+        }
 
-    /**
-     * TODO
-     * - only use mmap technique if filesize is over a certain amount
-     * - rename buffer_set_slabbed to buffer_set_mmapped or something
-     * - do not mmap() file directly; instead, copy to RDONLY tmpfile
-     * - this avoids having to remap bline data pointers when we overwrite the
-     *   original file in buffer_save_as
-     * - when saving, instead of buffer_get, write bline data directly to fd
-     */
+        // Read or mmap file into buffer
+        self->is_in_open = 1;
+        if (st.st_size >= MLBUF_LARGE_FILE_SIZE) {
+            if (_buffer_open_mmap(self, fd, st.st_size) != MLBUF_OK) {
+                rc = MLBUF_ERR;
+                break;
+            }
+        } else {
+            if (_buffer_open_read(self, fd, st.st_size) != MLBUF_OK) {
+                rc = MLBUF_ERR;
+                break;
+            }
+        }
+        self->is_in_open = 0;
+    } while(0);
 
-    // Memory map file
-    self->mmap = mmap(NULL, self->mmap_len, PROT_READ, MAP_PRIVATE, self->fd, 0);
-    if (self->mmap == MAP_FAILED) {
-        goto buffer_open_failure;
-    }
+    if (fd >= 0) close(fd);
 
-    // Fill buffer
-    self->is_in_open = 1;
-    //if ((rc = buffer_set_slabbed(self, self->mmap, (bint_t)self->mmap_len)) != MLBUF_OK) {
-    if ((rc = buffer_set(self, self->mmap, (bint_t)self->mmap_len)) != MLBUF_OK) {
-        goto buffer_open_failure;
-    }
-    self->is_in_open = 0;
+    if (rc == MLBUF_ERR) return rc;
+
+    // Set path
+    if (self->path) free(self->path);
+    self->path = strdup(path);
+    self->is_unsaved = 0;
 
     // Remember stat
     _buffer_stat(self);
 
-    if (self->path) free(self->path);
-    self->path = path;
-    self->is_unsaved = 0;
-
     return MLBUF_OK;
-
-buffer_open_failure:
-    _buffer_close_handles(self);
-    if (path) free(path);
-    return MLBUF_ERR;
 }
 
 // Write buffer to path
 int buffer_save(buffer_t* self) {
-    return buffer_save_as(self, self->path, self->path ? strlen(self->path) : 0, NULL);
+    return buffer_save_as(self, self->path, NULL);
 }
 
 // Write buffer to specified path
-int buffer_save_as(buffer_t* self, char* opath, int opath_len, bint_t* optret_nbytes) {
-    char* path;
+int buffer_save_as(buffer_t* self, char* path, bint_t* optret_nbytes) {
     FILE* fp;
-    char *data;
-    bint_t data_len;
+    size_t nbytes;
+    bline_t* bline;
+
+    if (optret_nbytes) *optret_nbytes = 0;
 
     // Exit early if path is empty
-    if (!opath || opath_len < 1) {
+    if (!path || strlen(path) < 1) {
         return MLBUF_ERR;
     }
-
-    // Get data
-    buffer_get(self, &data, &data_len);
 
     // Open file for writing
-    path = strndup(opath, opath_len);
     if (!(fp = fopen(path, "wb"))) {
-        free(path);
         return MLBUF_ERR;
     }
 
-    // Write data
-    if (fwrite(data, sizeof(char), data_len, fp) != data_len) {
-        fclose(fp);
-        free(path);
-        return MLBUF_ERR;
-    } else {
-        if (optret_nbytes) *optret_nbytes = data_len;
+    // Write bline data to file
+    nbytes = 0;
+    for (bline = self->first_line; bline; bline = bline->next) {
+        if (bline->data_len > 0) nbytes += fwrite(bline->data, sizeof(char), bline->data_len, fp);
+        if (bline->next)         nbytes += fwrite("\n", sizeof(char), 1, fp);
     }
+    fclose(fp);
+    if (optret_nbytes) *optret_nbytes = (bint_t)nbytes;
+    if (nbytes != self->byte_count) return MLBUF_ERR;
 
     // Set path
     if (self->path) free(self->path);
-    self->path = path;
+    self->path = strdup(path);
     self->is_unsaved = 0;
 
     // Remember stat
     _buffer_stat(self);
 
-    // Close file
-    fclose(fp);
     return MLBUF_OK;
 }
 
@@ -187,7 +181,7 @@ int buffer_destroy(buffer_t* self) {
         DL_DELETE(self->actions, action);
         _baction_destroy(action);
     }
-    _buffer_close_handles(self);
+    _buffer_munmap(self);
     if (self->slabbed_blines) free(self->slabbed_blines);
     if (self->slabbed_chars) free(self->slabbed_chars);
     free(self);
@@ -264,11 +258,15 @@ int buffer_get(buffer_t* self, char** ret_data, bint_t* ret_data_len) {
     return MLBUF_OK;
 }
 
+int buffer_clear(buffer_t* self) {
+    return buffer_delete(self, 0, self->byte_count);
+}
+
 // Set buffer contents
 int buffer_set(buffer_t* self, char* data, bint_t data_len) {
     int rc;
     MLBUF_MAKE_GT_EQ0(data_len);
-    if ((rc = buffer_delete(self, 0, self->byte_count)) != MLBUF_OK) {
+    if ((rc = buffer_clear(self)) != MLBUF_OK) {
         return rc;
     }
     rc = buffer_insert(self, 0, data, data_len, NULL);
@@ -277,7 +275,7 @@ int buffer_set(buffer_t* self, char* data, bint_t data_len) {
 }
 
 // Set buffer contents more efficiently
-int buffer_set_slabbed(buffer_t* self, char* data, bint_t data_len) {
+int buffer_set_mmapped(buffer_t* self, char* data, bint_t data_len) {
     bint_t nlines;
     bint_t line_num;
     bline_t* blines;
@@ -286,8 +284,7 @@ int buffer_set_slabbed(buffer_t* self, char* data, bint_t data_len) {
     char* data_newline;
     bint_t line_len;
 
-    if (self->byte_count > 0) {
-        // Intended for empty buffers only
+    if (buffer_clear(self) != MLBUF_OK) {
         return MLBUF_ERR;
     }
 
@@ -906,6 +903,63 @@ uintmax_t buffer_hash(buffer_t* self) {
     return hash;
 }
 
+static int _buffer_open_mmap(buffer_t* self, int fd, size_t size) {
+    char tmppath[16];
+    int tmpfd;
+    char readbuf[1024];
+    ssize_t nread;
+    char* mmap_buf;
+
+    // Copy fd to tmp file
+    sprintf(tmppath, "%s", "/tmp/mle-XXXXXX");
+    tmpfd = mkstemp(tmppath);
+    if (tmpfd < 0) {
+        return MLBUF_ERR;
+    }
+    unlink(tmppath);
+    while (1) {
+        nread = read(fd, &readbuf, 1024);
+        if (nread == 0) {
+            break;
+        } else if (nread < 0) {
+            close(tmpfd);
+            return MLBUF_ERR;
+        }
+        if (write(tmpfd, readbuf, nread) != nread) {
+            close(tmpfd);
+            return MLBUF_ERR;
+        }
+    }
+
+    // Now mmap tmp file
+    mmap_buf = mmap(NULL, size, PROT_READ, MAP_PRIVATE, tmpfd, 0);
+    if (mmap_buf == MAP_FAILED) {
+        return MLBUF_ERR;
+    } else if (buffer_set_mmapped(self, mmap_buf, (bint_t)size) != MLBUF_OK) {
+        return MLBUF_ERR;
+    }
+
+    _buffer_munmap(self);
+    self->mmap = mmap_buf;
+    self->mmap_len = size;
+    self->mmap_fd = tmpfd;
+    return MLBUF_OK;
+}
+
+static int _buffer_open_read(buffer_t* self, int fd, size_t size) {
+    int rc;
+    char* buf;
+    buf = malloc(size);
+    rc = MLBUF_OK;
+    if (size != (size_t)read(fd, buf, size)) {
+        rc = MLBUF_ERR;
+    } else if (buffer_set(self, buf, (bint_t)size) != MLBUF_OK) {
+        rc = MLBUF_ERR;
+    }
+    free(buf);
+    return rc;
+}
+
 static int _buffer_bline_unslab(bline_t* self) {
     char* data;
     bline_char_t* chars;
@@ -1430,16 +1484,14 @@ static bint_t _buffer_bline_index_to_col(bline_t* bline, bint_t index) {
 }
 
 // Close self->fd and self->mmap if needed
-static int _buffer_close_handles(buffer_t* self) {
-    if (self->fd) {
-        if (self->fd > 0) close(self->fd);
-        self->fd = 0;
-    }
+static int _buffer_munmap(buffer_t* self) {
     if (self->mmap) {
-        if (self->mmap != MAP_FAILED) munmap(self->mmap, self->mmap_len);
+        munmap(self->mmap, self->mmap_len);
+        close(self->mmap_fd);
         self->mmap = NULL;
+        self->mmap_len = 0;
+        self->mmap_fd = -1;
     }
-    self->mmap_len = 0;
     return MLBUF_OK;
 }
 

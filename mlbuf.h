@@ -42,7 +42,7 @@ struct buffer_s {
     int tab_width;
     buffer_callback_t callback;
     void* callback_udata;
-    int fd;
+    int mmap_fd;
     char* mmap;
     size_t mmap_len;
     bline_char_t* slabbed_chars;
@@ -143,15 +143,16 @@ struct srule_node_s {
 
 // buffer functions
 buffer_t* buffer_new();
-buffer_t* buffer_new_open(char* path, int path_len);
+buffer_t* buffer_new_open(char* path);
 mark_t* buffer_add_mark(buffer_t* self, bline_t* maybe_line, bint_t maybe_col);
 int buffer_destroy_mark(buffer_t* self, mark_t* mark);
-int buffer_open(buffer_t* self, char* path, int path_len);
+int buffer_open(buffer_t* self, char* path);
 int buffer_save(buffer_t* self);
-int buffer_save_as(buffer_t* self, char* path, int path_len, bint_t* optret_nbytes);
+int buffer_save_as(buffer_t* self, char* path, bint_t* optret_nbytes);
 int buffer_get(buffer_t* self, char** ret_data, bint_t* ret_data_len);
+int buffer_clear(buffer_t* self);
 int buffer_set(buffer_t* self, char* data, bint_t data_len);
-int buffer_set_slabbed(buffer_t* self, char* data, bint_t data_len);
+int buffer_set_mmapped(buffer_t* self, char* data, bint_t data_len);
 int buffer_substr(buffer_t* self, bline_t* start_line, bint_t start_col, bline_t* end_line, bint_t end_col, char** ret_data, bint_t* ret_data_len, bint_t* ret_nchars);
 int buffer_insert(buffer_t* self, bint_t offset, char* data, bint_t data_len, bint_t* optret_num_chars);
 int buffer_delete(buffer_t* self, bint_t offset, bint_t num_chars);
@@ -242,6 +243,9 @@ void _mark_mark_move_inner(mark_t* mark, bline_t* bline_target, bint_t col, int 
 
 // Macros
 #define MLBUF_DEBUG 1
+
+// #define MLBUF_LARGE_FILE_SIZE 10485760
+#define MLBUF_LARGE_FILE_SIZE 0
 
 #define MLBUF_OK 0
 #define MLBUF_ERR 1

@@ -299,7 +299,7 @@ int buffer_set_mmapped(buffer_t* self, char* data, bint_t data_len) {
     }
 
     // Allocate blines and chars. These are freed in buffer_destroy.
-    self->slabbed_chars = malloc(data_len * sizeof(bline_char_t));
+    self->slabbed_chars = calloc(data_len, sizeof(bline_char_t));
     self->slabbed_blines = malloc(nlines * sizeof(bline_t));
     blines = self->slabbed_blines;
 

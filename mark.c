@@ -64,12 +64,7 @@ int mark_move_to(mark_t* self, bint_t line_index, bint_t col) {
 int mark_move_by(mark_t* self, bint_t char_delta) {
     bint_t offset;
     buffer_get_offset(self->bline->buffer, self->bline, self->col, &offset);
-    return mark_move_offset(
-        self,
-        MLBUF_MIN(self->bline->buffer->char_count,
-            MLBUF_MAX(0, offset + char_delta)
-        )
-    );
+    return mark_move_offset(self, offset + char_delta);
 }
 
 // Get mark offset
@@ -105,6 +100,7 @@ int mark_move_bol(mark_t* self) {
 
 // Move mark to end of line
 int mark_move_eol(mark_t* self) {
+    MLBUF_BLINE_ENSURE_CHARS(self->bline);
     _mark_mark_move_inner(self, self->bline, self->bline->char_count, 1, 1);
     return MLBUF_OK;
 }
@@ -123,6 +119,7 @@ int mark_move_beginning(mark_t* self) {
 
 // Move mark to end of buffer
 int mark_move_end(mark_t* self) {
+    MLBUF_BLINE_ENSURE_CHARS(self->bline->buffer->last_line);
     _mark_mark_move_inner(self, self->bline->buffer->last_line, self->bline->buffer->last_line->char_count, 1, 1);
     return MLBUF_OK;
 }
@@ -212,6 +209,7 @@ int mark_find_bracket_top(mark_t* self, bint_t max_chars, bline_t** ret_line, bi
     stacks = calloc(128, sizeof(int));
     found = 0;
     while (!found && max_chars > 0 && cur_line) {
+        MLBUF_BLINE_ENSURE_CHARS(cur_line);
         col -= 1;
         if (col < 0) {
             cur_line = cur_line->prev;
@@ -254,6 +252,8 @@ int mark_find_bracket_pair(mark_t* self, bint_t max_chars, bline_t** ret_line, b
         '(', ')',
         '{', '}'
     };
+    MLBUF_BLINE_ENSURE_CHARS(self->bline);
+
     // If we're at eol, there's nothing to match
     if (self->col >= self->bline->char_count) {
         return MLBUF_ERR;
@@ -285,6 +285,7 @@ int mark_find_bracket_pair(mark_t* self, bint_t max_chars, bline_t** ret_line, b
     col = self->col;
     nchars = 0;
     while (cur_line) {
+        MLBUF_BLINE_ENSURE_CHARS(cur_line);
         for (; col >= 0 && col < cur_line->char_count; col += dir) {
             cur = *(cur_line->data + cur_line->chars[col].index);
             if (cur == targ) {
@@ -372,6 +373,7 @@ int mark_swap_with_mark(mark_t* self, mark_t* other) {
 
 // Return 1 if mark is at eol, else return 0
 int mark_is_at_eol(mark_t* self) {
+    MLBUF_BLINE_ENSURE_CHARS(self->bline);
     return self->col >= self->bline->char_count ? 1 : 0;
 }
 
@@ -433,6 +435,7 @@ int mark_move_bracket_top(mark_t* self, bint_t max_chars) {
 // boundary (i.e., \w\W). If side == 0, return 1 for either case.
 int mark_is_at_word_bound(mark_t* self, int side) {
     uint32_t before, after;
+    MLBUF_BLINE_ENSURE_CHARS(self->bline);
     before = self->col > 0 && self->col - 1 < self->bline->char_count ? self->bline->chars[self->col - 1].ch : 0;
     after  = self->col < self->bline->char_count ? self->bline->chars[self->col].ch : 0;
     if (side <= -1 || side == 0) {
@@ -478,6 +481,7 @@ int mark_get_char_after(mark_t* self, uint32_t* ret_char) {
     if (mark_is_at_eol(self)) {
         *ret_char = 0;
     } else {
+        MLBUF_BLINE_ENSURE_CHARS(self->bline);
         *ret_char = self->bline->chars[self->col].ch;
     }
     return MLBUF_OK;
@@ -488,6 +492,7 @@ int mark_get_char_before(mark_t* self, uint32_t* ret_char) {
     if (mark_is_at_bol(self)) {
         *ret_char = 0;
     } else {
+        MLBUF_BLINE_ENSURE_CHARS(self->bline);
         *ret_char = self->bline->chars[self->col - 1].ch;
     }
     return MLBUF_OK;
@@ -515,10 +520,11 @@ static int mark_find_match(mark_t* self, mark_find_match_fn matchfn, void* u1, v
             max_offset = search_line->data_len;
         } else {
             look_offset = 0;
+            MLBUF_BLINE_ENSURE_CHARS(search_line);
             max_offset = search_line->chars[self->col - 1].index;
         }
-
     } else {
+        MLBUF_BLINE_ENSURE_CHARS(search_line);
         if (self->col >= search_line->char_count) {
             // At eol, so look on next line
             search_line = search_line->next;
@@ -570,6 +576,7 @@ void _mark_mark_move_inner(mark_t* mark, bline_t* bline_target, bint_t col, int 
         DL_DELETE(mark->bline->marks, mark);
         mark->bline = bline_target;
     }
+    MLBUF_BLINE_ENSURE_CHARS(mark->bline);
     mark->col = MLBUF_MIN(mark->bline->char_count, MLBUF_MAX(0, col));
     if (do_set_target) {
         mark->target_col = mark->col;

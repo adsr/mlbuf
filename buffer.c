@@ -7,7 +7,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <wchar.h>
 #include "mlbuf.h"
 #include "utlist.h"
 
@@ -27,7 +26,6 @@ static bint_t _buffer_bline_insert(bline_t* bline, bint_t col, char* data, bint_
 static bint_t _buffer_bline_delete(bline_t* bline, bint_t col, bint_t num_chars);
 static bint_t _buffer_bline_col_to_index(bline_t* bline, bint_t col);
 static bint_t _buffer_bline_index_to_col(bline_t* bline, bint_t index);
-static int _buffer_bline_count_chars(bline_t* bline);
 static int _srule_multi_find(srule_t* rule, int find_end, bline_t* bline, bint_t start_offset, bint_t* ret_start, bint_t* ret_stop);
 static int _srule_multi_find_start(srule_t* rule, bline_t* bline, bint_t start_offset, bint_t* ret_start, bint_t* ret_stop);
 static int _srule_multi_find_end(srule_t* rule, bline_t* bline, bint_t start_offset, bint_t* ret_stop);
@@ -84,14 +82,25 @@ int buffer_open(buffer_t* self, char* opath, int opath_len) {
     }
     self->mmap_len = st.st_size;
 
+    /**
+     * TODO
+     * - only use mmap technique if filesize is over a certain amount
+     * - rename buffer_set_slabbed to buffer_set_mmapped or something
+     * - do not mmap() file directly; instead, copy to RDONLY tmpfile
+     * - this avoids having to remap bline data pointers when we overwrite the
+     *   original file in buffer_save_as
+     * - when saving, instead of buffer_get, write bline data directly to fd
+     */
+
     // Memory map file
-    self->mmap = mmap(0, self->mmap_len, PROT_READ, MAP_PRIVATE, self->fd, 0);
+    self->mmap = mmap(NULL, self->mmap_len, PROT_READ, MAP_PRIVATE, self->fd, 0);
     if (self->mmap == MAP_FAILED) {
         goto buffer_open_failure;
     }
 
     // Fill buffer
     self->is_in_open = 1;
+    //if ((rc = buffer_set_slabbed(self, self->mmap, (bint_t)self->mmap_len)) != MLBUF_OK) {
     if ((rc = buffer_set(self, self->mmap, (bint_t)self->mmap_len)) != MLBUF_OK) {
         goto buffer_open_failure;
     }
@@ -129,6 +138,9 @@ int buffer_save_as(buffer_t* self, char* opath, int opath_len, bint_t* optret_nb
         return MLBUF_ERR;
     }
 
+    // Get data
+    buffer_get(self, &data, &data_len);
+
     // Open file for writing
     path = strndup(opath, opath_len);
     if (!(fp = fopen(path, "wb"))) {
@@ -137,7 +149,6 @@ int buffer_save_as(buffer_t* self, char* opath, int opath_len, bint_t* optret_nb
     }
 
     // Write data
-    buffer_get(self, &data, &data_len);
     if (fwrite(data, sizeof(char), data_len, fp) != data_len) {
         fclose(fp);
         free(path);
@@ -177,6 +188,8 @@ int buffer_destroy(buffer_t* self) {
         _baction_destroy(action);
     }
     _buffer_close_handles(self);
+    if (self->slabbed_blines) free(self->slabbed_blines);
+    if (self->slabbed_chars) free(self->slabbed_chars);
     free(self);
     return MLBUF_OK;
 }
@@ -255,12 +268,93 @@ int buffer_get(buffer_t* self, char** ret_data, bint_t* ret_data_len) {
 int buffer_set(buffer_t* self, char* data, bint_t data_len) {
     int rc;
     MLBUF_MAKE_GT_EQ0(data_len);
-    if ((rc = buffer_delete(self, 0, self->char_count)) != MLBUF_OK) {
+    if ((rc = buffer_delete(self, 0, self->byte_count)) != MLBUF_OK) {
         return rc;
     }
     rc = buffer_insert(self, 0, data, data_len, NULL);
     if (self->actions) _buffer_truncate_undo_stack(self, self->actions);
     return rc;
+}
+
+// Set buffer contents more efficiently
+int buffer_set_slabbed(buffer_t* self, char* data, bint_t data_len) {
+    bint_t nlines;
+    bint_t line_num;
+    bline_t* blines;
+    bint_t data_remaining_len;
+    char* data_cursor;
+    char* data_newline;
+    bint_t line_len;
+
+    if (self->byte_count > 0) {
+        // Intended for empty buffers only
+        return MLBUF_ERR;
+    }
+
+    // Count number of lines
+    nlines = 1;
+    data_cursor = data;
+    data_remaining_len = data_len;
+    while (data_remaining_len > 0 && (data_newline = memchr(data_cursor, '\n', data_remaining_len)) != NULL) {
+        data_remaining_len -= (bint_t)(data_newline - data_cursor) + 1;
+        data_cursor = data_newline + 1;
+        nlines += 1;
+    }
+
+    // Allocate blines and chars. These are freed in buffer_destroy.
+    self->slabbed_chars = malloc(data_len * sizeof(bline_char_t));
+    self->slabbed_blines = malloc(nlines * sizeof(bline_t));
+    blines = self->slabbed_blines;
+
+    // Populate blines
+    line_num = 0;
+    data_cursor = data;
+    data_remaining_len = data_len;
+    while (1) {
+        data_newline = data_remaining_len > 0
+            ? memchr(data_cursor, '\n', data_remaining_len)
+            : NULL;
+        line_len = data_newline ?
+            (bint_t)(data_newline - data_cursor)
+            : data_remaining_len;
+        blines[line_num] = (bline_t){
+            .buffer = self,
+            .data = data_cursor,
+            .data_len = line_len,
+            .data_cap = line_len,
+            .line_index = line_num,
+            .char_count = line_len,
+            .char_vwidth = line_len,
+            .chars = (self->slabbed_chars + (data_len - data_remaining_len)),
+            .chars_cap = line_len,
+            .marks = NULL,
+            .bol_rule = NULL,
+            .eol_rule = NULL,
+            .is_chars_dirty = 1,
+            .is_slabbed = 1,
+            .is_data_slabbed = 1,
+            .next = NULL,
+            .prev = NULL
+        };
+        if (line_num > 0) {
+            blines[line_num-1].next = blines + line_num;
+            blines[line_num].prev = blines + (line_num-1);
+        }
+        if (data_newline) {
+            data_remaining_len -= line_len + 1;
+            data_cursor = data_newline + 1;
+            line_num += 1;
+        } else {
+            break;
+        }
+    }
+
+    if (self->first_line) _buffer_bline_free(self->first_line, NULL, 0);
+    self->first_line = blines;
+    self->last_line = blines + line_num;
+    self->byte_count = data_len;
+    self->line_count = line_num + 1;
+    return MLBUF_OK;
 }
 
 // Insert data into buffer given a buffer offset
@@ -377,6 +471,7 @@ int buffer_delete_w_bline(buffer_t* self, bline_t* start_line, bint_t start_col,
     end_col = start_col;
     num_chars_rem = num_chars;
     while (num_chars_rem > 0) {
+        MLBUF_BLINE_ENSURE_CHARS(end_line);
         if (end_line->char_count - end_col >= num_chars_rem) {
             end_col += num_chars_rem;
             num_chars_rem = 0;
@@ -391,8 +486,10 @@ int buffer_delete_w_bline(buffer_t* self, bline_t* start_line, bint_t start_col,
             }
         }
     }
+    num_chars -= num_chars_rem;
 
     // Exit early if there is nothing to delete
+    MLBUF_BLINE_ENSURE_CHARS(self->last_line);
     if (start_line == end_line && start_col >= end_col) {
         return MLBUF_OK;
     } else if (start_line == self->last_line && start_col == self->last_line->char_count) {
@@ -403,12 +500,14 @@ int buffer_delete_w_bline(buffer_t* self, bline_t* start_line, bint_t start_col,
     buffer_substr(self, start_line, start_col, end_line, end_col, &del_data, &del_data_len, &del_data_nchars);
 
     // Delete suffix starting at start_line:start_col
+    MLBUF_BLINE_ENSURE_CHARS(start_line);
     safe_num_chars = MLBUF_MIN(num_chars, start_line->char_count - start_col);
     if (safe_num_chars > 0) {
         _buffer_bline_delete(start_line, start_col, safe_num_chars);
     }
 
     // Copy remaining portion of end_line to start_line:start_col
+    MLBUF_BLINE_ENSURE_CHARS(start_line);
     orig_char_count = start_line->char_count;
     if (start_line != end_line && (tmp_len = end_line->data_len - _buffer_bline_col_to_index(end_line, end_col)) > 0) {
         _buffer_bline_insert(
@@ -434,7 +533,6 @@ int buffer_delete_w_bline(buffer_t* self, bline_t* start_line, bint_t start_col,
     }
     start_line->next = swap_line;
     if (swap_line) swap_line->prev = start_line;
-
 
     // Handle action
     action = calloc(1, sizeof(baction_t));
@@ -476,6 +574,7 @@ int buffer_get_bline_col(buffer_t* self, bint_t offset, bline_t** ret_bline, bin
 
     remaining_chars = offset;
     for (tmp_line = self->first_line; tmp_line != NULL; tmp_line = tmp_line->next) {
+        MLBUF_BLINE_ENSURE_CHARS(tmp_line);
         if (tmp_line->char_count >= remaining_chars) {
             *ret_bline = tmp_line;
             *ret_col = remaining_chars;
@@ -500,8 +599,9 @@ int buffer_get_offset(buffer_t* self, bline_t* bline, bint_t col, bint_t* ret_of
 
     offset = 0;
     for (tmp_line = self->first_line; tmp_line != bline->next; tmp_line = tmp_line->next) {
+        MLBUF_BLINE_ENSURE_CHARS(tmp_line);
         if (tmp_line == bline) {
-            offset = MLBUF_MIN(self->char_count, offset + col);
+            offset += MLBUF_MIN(tmp_line->char_count, col);
             break;
         } else {
             offset += tmp_line->char_count + 1; // Plus 1 for newline
@@ -576,100 +676,8 @@ int buffer_set_tab_width(buffer_t* self, int tab_width) {
     }
     self->tab_width = tab_width;
     for (tmp_line = self->first_line; tmp_line; tmp_line = tmp_line->next) {
-        _buffer_bline_count_chars(tmp_line);
+        bline_count_chars(tmp_line);
     }
-    return MLBUF_OK;
-}
-
-// Print buffer debug info to stream
-int buffer_debug_dump(buffer_t* self, FILE* stream) {
-    int i;
-    bint_t j;
-    bline_t* bline_tmp;
-    srule_node_t* srule_tmp;
-    mark_t* mark_tmp;
-    char* mark_str;
-    bint_t mark_str_len;
-    mark_str = NULL;
-    mark_str_len = 0;
-    fprintf(stream, "first_line=%lu\n", self->first_line->line_index);
-    fprintf(stream, "last_line=%lu\n", self->last_line->line_index);
-    fprintf(stream, "byte_count=%lu\n", self->byte_count);
-    fprintf(stream, "char_count=%lu\n", self->char_count);
-    fprintf(stream, "line_count=%lu\n", self->line_count);
-    fprintf(stream, "lines:\n");
-    for (bline_tmp = self->first_line; bline_tmp; bline_tmp = bline_tmp->next) {
-        fprintf(stream, "  %lu\n", bline_tmp->line_index);
-        fprintf(stream, "    data=[%.*s]\n", (int)bline_tmp->data_len, bline_tmp->data ? bline_tmp->data : "");
-        if (bline_tmp->char_count + 1 > mark_str_len) {
-            mark_str = realloc(mark_str, bline_tmp->char_count + 1);
-        }
-        memset(mark_str, ' ', bline_tmp->char_count + 1);
-        DL_FOREACH(bline_tmp->marks, mark_tmp) {
-            *(mark_str + mark_tmp->col) = mark_tmp->letter;
-        }
-        fprintf(stream, "    mark  %.*s\n", (int)(bline_tmp->char_count + 1), mark_str);
-        fprintf(stream, "      fg  ");
-        if (bline_tmp->chars) {
-            for (j = 0; j < bline_tmp->char_count; j++) {
-                fprintf(stream, "%c", bline_tmp->chars[j].style.fg ? '*' : ' ');
-            }
-        }
-        fprintf(stream, "\n      bg  ");
-        if (bline_tmp->chars) {
-            for (j = 0; j < bline_tmp->char_count; j++) {
-                fprintf(stream, "%c", bline_tmp->chars[j].style.bg ? '*' : ' ');
-            }
-        }
-        fprintf(stream, "\n");
-    }
-    fprintf(stream, "lines_extra:\n");
-    for (bline_tmp = self->first_line; bline_tmp; bline_tmp = bline_tmp->next) {
-        fprintf(stream, "  %lu\n", bline_tmp->line_index);
-        fprintf(stream, "    line_index=%lu\n", bline_tmp->line_index);
-        fprintf(stream, "    char_count=%lu\n", bline_tmp->char_count);
-        fprintf(stream, "    next=%ld\n", bline_tmp->next ? bline_tmp->next->line_index : -1);
-        fprintf(stream, "    prev=%ld\n", bline_tmp->prev ? bline_tmp->prev->line_index : -1);
-        fprintf(stream, "    data_cap=%lu\n", bline_tmp->data_cap);
-        fprintf(stream, "    char_indexes+vcol=");
-        if (bline_tmp->chars) {
-            for (j = 0; j < bline_tmp->char_count; j++) {
-                fprintf(stream, "%lu@%lu ", bline_tmp->chars[j].index, bline_tmp->chars[j].vcol);
-            }
-        }
-        fprintf(stream, "\n    chars_cap=%lu\n", bline_tmp->chars_cap);
-    }
-    fprintf(stream, "single_srules:\n");
-    i = 0; DL_FOREACH(self->single_srules, srule_tmp) {
-        fprintf(stream, "  %d\n", i);
-        fprintf(stream, "    type=%d\n", srule_tmp->srule->type);
-        fprintf(stream, "    re=%s\n", srule_tmp->srule->re ? srule_tmp->srule->re : "");
-        fprintf(stream, "    re_end=%s\n", srule_tmp->srule->re_end ? srule_tmp->srule->re_end : "");
-        fprintf(stream, "    cre=%c\n", srule_tmp->srule->cre ? 'y' : 'n');
-        fprintf(stream, "    cre_end=%c\n", srule_tmp->srule->cre_end ? 'y' : 'n');
-        fprintf(stream, "    range_a=%c\n", srule_tmp->srule->range_a ? srule_tmp->srule->range_a->letter : ' ');
-        fprintf(stream, "    range_b=%c\n", srule_tmp->srule->range_b ? srule_tmp->srule->range_b->letter : ' ');
-        fprintf(stream, "    style=%d,%d\n", srule_tmp->srule->style.fg, srule_tmp->srule->style.bg);
-        i++;
-    }
-    fprintf(stream, "multi_srules:\n");
-    i = 0; DL_FOREACH(self->multi_srules, srule_tmp) {
-        fprintf(stream, "  %d\n", i);
-        fprintf(stream, "    type=%d\n", srule_tmp->srule->type);
-        fprintf(stream, "    re=%s\n", srule_tmp->srule->re ? srule_tmp->srule->re : "");
-        fprintf(stream, "    re_end=%s\n", srule_tmp->srule->re_end ? srule_tmp->srule->re_end : "");
-        fprintf(stream, "    cre=%c\n", srule_tmp->srule->cre ? 'y' : 'n');
-        fprintf(stream, "    cre_end=%c\n", srule_tmp->srule->cre_end ? 'y' : 'n');
-        fprintf(stream, "    range_a=%c\n", srule_tmp->srule->range_a ? srule_tmp->srule->range_a->letter : ' ');
-        fprintf(stream, "    range_b=%c\n", srule_tmp->srule->range_b ? srule_tmp->srule->range_b->letter : ' ');
-        fprintf(stream, "    style=%d,%d\n", srule_tmp->srule->style.fg, srule_tmp->srule->style.bg);
-        i++;
-    }
-    fprintf(stream, "action_tail=%c\n", self->action_tail ? 'y' : 'n');
-    fprintf(stream, "action_undone=%c\n", self->action_undone ? 'y' : 'n');
-    fprintf(stream, "data=%.*s\n", (int)self->data_len, self->data ? self->data : "");
-    fprintf(stream, "is_data_dirty=%d\n", self->is_data_dirty);
-    if (mark_str) free(mark_str);
     return MLBUF_OK;
 }
 
@@ -701,6 +709,7 @@ int buffer_substr(buffer_t* self, bline_t* start_line, bint_t start_col, bline_t
         } else if (tmp_line == start_line) {
             copy_index = _buffer_bline_col_to_index(start_line, start_col);
             copy_len = tmp_line->data_len - copy_index;
+            MLBUF_BLINE_ENSURE_CHARS(start_line);
             nchars += start_line->char_count - start_col;
         } else if (tmp_line == end_line) {
             copy_index = 0;
@@ -709,6 +718,7 @@ int buffer_substr(buffer_t* self, bline_t* start_line, bint_t start_col, bline_t
         } else {
             copy_index = 0;
             copy_len = tmp_line->data_len;
+            MLBUF_BLINE_ENSURE_CHARS(tmp_line);
             nchars += tmp_line->char_count;
         }
 
@@ -764,6 +774,7 @@ int buffer_undo(buffer_t* self) {
     // Get line to perform undo on
     bline = NULL;
     buffer_get_bline(self, action_to_undo->start_line_index, &bline);
+    MLBUF_BLINE_ENSURE_CHARS(bline);
     if (!bline) {
         return MLBUF_ERR;
     } else if (action_to_undo->start_col > bline->char_count) {
@@ -795,6 +806,7 @@ int buffer_redo(buffer_t* self) {
     // Get line to perform undo on
     bline = NULL;
     buffer_get_bline(self, action_to_redo->start_line_index, &bline);
+    MLBUF_BLINE_ENSURE_CHARS(bline);
     if (!bline) {
         return MLBUF_ERR;
     } else if (action_to_redo->start_col > bline->char_count) {
@@ -825,6 +837,9 @@ int buffer_set_styles_enabled(buffer_t* self, int is_enabled) {
 // Apply styles from start_line
 int buffer_apply_styles(buffer_t* self, bline_t* start_line, bint_t line_delta) {
     bint_t min_nlines;
+    srule_node_t* srule_node;
+    int count_tmp;
+    int srule_count;
 
     if (self->is_style_disabled) {
         return MLBUF_OK;
@@ -835,9 +850,22 @@ int buffer_apply_styles(buffer_t* self, bline_t* start_line, bint_t line_delta) 
     //     line_delta == 0: 1 (start_line)
     //     line_delta  > 0: 1 + line_delta (start_line + added lines)
     min_nlines = 1 + (line_delta < 0 ? 1 : line_delta);
-    _buffer_apply_styles_singles(start_line, min_nlines);
-    _buffer_apply_styles_multis(start_line, min_nlines, MLBUF_SRULE_TYPE_MULTI);
-    _buffer_apply_styles_multis(start_line, min_nlines, MLBUF_SRULE_TYPE_RANGE);
+
+
+    // Count current srules
+    srule_count = 0;
+    DL_COUNT(self->single_srules, srule_node, count_tmp);
+    srule_count += count_tmp;
+    DL_COUNT(self->multi_srules, srule_node, count_tmp);
+    srule_count += count_tmp;
+
+    // Apply rules if there are any, or if the number of rules changed
+    if (srule_count > 0 || self->num_applied_srules != srule_count) {
+        _buffer_apply_styles_singles(start_line, min_nlines);
+        _buffer_apply_styles_multis(start_line, min_nlines, MLBUF_SRULE_TYPE_MULTI);
+        _buffer_apply_styles_multis(start_line, min_nlines, MLBUF_SRULE_TYPE_RANGE);
+        self->num_applied_srules = srule_count;
+    }
 
     return MLBUF_OK;
 }
@@ -877,6 +905,24 @@ uintmax_t buffer_hash(buffer_t* self) {
     return hash;
 }
 
+static int _buffer_bline_unslab(bline_t* self) {
+    char* data;
+    bline_char_t* chars;
+    if (!self->is_data_slabbed) {
+        return MLBUF_ERR;
+    }
+    data = malloc(self->data_len);
+    chars = malloc(self->data_len * sizeof(bline_char_t));
+    memcpy(data, self->data, self->data_len);
+    memcpy(chars, self->chars, self->data_len * sizeof(bline_char_t));
+    self->data = data;
+    self->data_cap = self->data_len;
+    self->chars = chars;
+    self->chars_cap = self->data_len;
+    self->is_data_slabbed = 0;
+    return bline_count_chars(self);
+}
+
 static void _buffer_stat(buffer_t* self) {
     if (!self->path) {
         return;
@@ -909,7 +955,6 @@ static int _buffer_update(buffer_t* self, baction_t* action) {
 
     // Adjust counts
     self->byte_count += action->byte_delta;
-    self->char_count += action->char_delta;
     self->line_count += action->line_delta;
     self->is_data_dirty = 1;
 
@@ -991,9 +1036,9 @@ static int _buffer_apply_styles_singles(bline_t* start_line, bint_t min_nlines) 
     cur_line = start_line;
     styled_nlines = 0;
     while (cur_line && styled_nlines < min_nlines) {
-        if (cur_line->char_count > 0) {
+        if (cur_line->data_len > 0) {
             // Reset styles of cur_line
-            for (i = 0; i < cur_line->char_count; i++) {
+            for (i = 0; i < cur_line->data_len; i++) {
                 cur_line->chars[i].style = (sblock_t){0, 0};
             }
 
@@ -1001,8 +1046,7 @@ static int _buffer_apply_styles_singles(bline_t* start_line, bint_t min_nlines) 
             DL_FOREACH(start_line->buffer->single_srules, srule_node) {
                 _buffer_bline_apply_style_single(srule_node->srule, cur_line);
             }
-
-        } // end if cur_line->char_count > 0
+        }
 
         // Done styling cur_line; increment styled_nlines
         styled_nlines += 1;
@@ -1037,44 +1081,39 @@ static int _buffer_apply_styles_multis(bline_t* start_line, bint_t min_nlines, i
         if (!open_rule_ended) {
             multi_look_offset = 0;
         }
-        //if (cur_line->char_count > 0) {
+        if (open_rule) {
+            // Apply open_rule to cur_line
+            already_open = cur_line->eol_rule == open_rule ? 1 : 0;
+            _buffer_bline_apply_style_multi(open_rule, cur_line, &open_rule, &multi_look_offset);
             if (open_rule) {
-                // Apply open_rule to cur_line
-                already_open = cur_line->eol_rule == open_rule ? 1 : 0;
-                _buffer_bline_apply_style_multi(open_rule, cur_line, &open_rule, &multi_look_offset);
-                if (open_rule) {
-                    // open_rule is still open
-                    if (styled_nlines > min_nlines && already_open) {
-                        // We are past min_nlines and styles have not changed; done
-                        break;
-                    }
-                } else {
-                    // open_rule ended on this line; resume normal styling on same line
-                    open_rule_ended = 1;
-                    continue;
+                // open_rule is still open
+                if (styled_nlines > min_nlines && already_open) {
+                    // We are past min_nlines and styles have not changed; done
+                    break;
                 }
             } else {
-                if (srule_type == MLBUF_SRULE_TYPE_MULTI) {
-                    // Re-apply single line rules if a multi-line rule was resolved
-                    if (cur_line->prev && cur_line->bol_rule != cur_line->prev->eol_rule) {
-                        _buffer_apply_styles_singles(cur_line, 1);
-                    }
-                    // Reset bol_rule and eol_rule
-                    if (!open_rule_ended) cur_line->bol_rule = NULL;
-                    cur_line->eol_rule = NULL;
-                }
-                // Apply multi-line styles to cur_line
-                DL_FOREACH(start_line->buffer->multi_srules, srule_node) {
-                    if (srule_node->srule->type != srule_type) continue;
-                    _buffer_bline_apply_style_multi(srule_node->srule, cur_line, &open_rule, &multi_look_offset);
-                    multi_look_offset = 0;
-                    if (open_rule) break; // We have an open_rule; break
-                }
+                // open_rule ended on this line; resume normal styling on same line
+                open_rule_ended = 1;
+                continue;
             }
-        //} else if (cur_line->char_count < 1) {
-        //    cur_line->bol_rule = open_rule;
-        //    cur_line->eol_rule = open_rule;
-        //} // end if cur_line->char_count > 0
+        } else {
+            if (srule_type == MLBUF_SRULE_TYPE_MULTI) {
+                // Re-apply single line rules if a multi-line rule was resolved
+                if (cur_line->prev && cur_line->bol_rule != cur_line->prev->eol_rule) {
+                    _buffer_apply_styles_singles(cur_line, 1);
+                }
+                // Reset bol_rule and eol_rule
+                if (!open_rule_ended) cur_line->bol_rule = NULL;
+                cur_line->eol_rule = NULL;
+            }
+            // Apply multi-line styles to cur_line
+            DL_FOREACH(start_line->buffer->multi_srules, srule_node) {
+                if (srule_node->srule->type != srule_type) continue;
+                _buffer_bline_apply_style_multi(srule_node->srule, cur_line, &open_rule, &multi_look_offset);
+                multi_look_offset = 0;
+                if (open_rule) break; // We have an open_rule; break
+            }
+        }
 
         // Done styling cur_line; increment styled_nlines
         styled_nlines += 1;
@@ -1102,6 +1141,7 @@ static int _buffer_bline_apply_style_single(srule_t* srule, bline_t* bline) {
     bint_t look_offset;
     look_offset = 0;
 
+    MLBUF_BLINE_ENSURE_CHARS(bline);
     while (look_offset < bline->data_len) {
         if ((rc = pcre_exec(srule->cre, srule->crex, bline->data, bline->data_len, look_offset, 0, substrs, 3)) >= 0) {
             if (substrs[1] < 0) {
@@ -1134,6 +1174,8 @@ static int _buffer_bline_apply_style_multi(srule_t* srule, bline_t* bline, srule
         // Empty range rule
         return MLBUF_OK;
     }
+
+    MLBUF_BLINE_ENSURE_CHARS(bline);
 
     do {
         found_start = 0;
@@ -1189,8 +1231,10 @@ static bline_t* _buffer_bline_new(buffer_t* self) {
 static int _buffer_bline_free(bline_t* bline, bline_t* maybe_mark_line, bint_t col_delta) {
     mark_t* mark;
     mark_t* mark_tmp;
-    if (bline->data) free(bline->data);
-    if (bline->chars) free(bline->chars);
+    if (!bline->is_data_slabbed) {
+        if (bline->data) free(bline->data);
+        if (bline->chars) free(bline->chars);
+    }
     if (bline->marks) {
         DL_FOREACH_SAFE(bline->marks, mark, mark_tmp) {
             if (maybe_mark_line) {
@@ -1201,7 +1245,9 @@ static int _buffer_bline_free(bline_t* bline, bline_t* maybe_mark_line, bint_t c
             }
         }
     }
-    free(bline);
+    if (!bline->is_slabbed) {
+        free(bline);
+    }
     return MLBUF_OK;
 }
 
@@ -1212,6 +1258,9 @@ static bline_t* _buffer_bline_break(bline_t* bline, bint_t col) {
     bline_t* tmp_line;
     mark_t* mark;
     mark_t* mark_tmp;
+
+    // Unslab if needed
+    if (bline->is_data_slabbed) _buffer_bline_unslab(bline);
 
     // Make new_line
     new_line = _buffer_bline_new(bline->buffer);
@@ -1226,11 +1275,11 @@ static bline_t* _buffer_bline_break(bline_t* bline, bint_t col) {
         memcpy(new_line->data, bline->data + index, len);
         new_line->data_len = len;
         new_line->data_cap = len;
-        _buffer_bline_count_chars(new_line); // Update char widths
+        bline_count_chars(new_line); // Update char widths
 
         // Truncate orig line
         bline->data_len -= len;
-        _buffer_bline_count_chars(bline); // Update char widths
+        bline_count_chars(bline); // Update char widths
     }
 
     // Insert new_line in linked list
@@ -1257,6 +1306,13 @@ static bint_t _buffer_bline_insert(bline_t* bline, bint_t col, char* data, bint_
     bint_t orig_char_count;
     bint_t num_chars_added;
 
+    // Unslab if needed
+    if (bline->is_data_slabbed) _buffer_bline_unslab(bline);
+
+    // Get orig char_count
+    MLBUF_BLINE_ENSURE_CHARS(bline);
+    orig_char_count = bline->char_count;
+
     // Ensure space for data
     if (!bline->data) {
         bline->data = malloc(data_len);
@@ -1279,8 +1335,7 @@ static bint_t _buffer_bline_insert(bline_t* bline, bint_t col, char* data, bint_
     memcpy(bline->data + index, data, data_len);
 
     // Update chars
-    orig_char_count = bline->char_count;
-    _buffer_bline_count_chars(bline);
+    bline_count_chars(bline);
     num_chars_added = bline->char_count - orig_char_count;
 
     // Move marks at or past col right by num_chars_added
@@ -1304,6 +1359,13 @@ static bint_t _buffer_bline_delete(bline_t* bline, bint_t col, bint_t num_chars)
     mark_t* mark_tmp;
     bint_t orig_char_count;
     bint_t num_chars_deleted;
+
+    // Unslab if needed
+    if (bline->is_data_slabbed) _buffer_bline_unslab(bline);
+
+    // Get orig char_count
+    MLBUF_BLINE_ENSURE_CHARS(bline);
+    orig_char_count = bline->char_count;
 
     // Clamp num_chars
     safe_num_chars = MLBUF_MIN(bline->char_count - col, num_chars);
@@ -1329,8 +1391,7 @@ static bint_t _buffer_bline_delete(bline_t* bline, bint_t col, bint_t num_chars)
     bline->data_len -= index_end - index;
 
     // Update chars
-    orig_char_count = bline->char_count;
-    _buffer_bline_count_chars(bline);
+    bline_count_chars(bline);
     num_chars_deleted = orig_char_count - bline->char_count;
 
     // Move marks past col left by num_chars_deleted
@@ -1345,6 +1406,7 @@ static bint_t _buffer_bline_delete(bline_t* bline, bint_t col, bint_t num_chars)
 
 static bint_t _buffer_bline_col_to_index(bline_t* bline, bint_t col) {
     bint_t index;
+    MLBUF_BLINE_ENSURE_CHARS(bline);
     if (!bline->chars) {
         return 0;
     }
@@ -1357,88 +1419,13 @@ static bint_t _buffer_bline_col_to_index(bline_t* bline, bint_t col) {
 }
 
 static bint_t _buffer_bline_index_to_col(bline_t* bline, bint_t index) {
+    MLBUF_BLINE_ENSURE_CHARS(bline);
     if (index < 1) {
         return 0;
     } else if (index >= bline->data_len) {
         return bline->char_count;
     }
     return bline->chars[index].index_to_vcol;
-}
-
-static int _buffer_bline_count_chars(bline_t* bline) {
-    char* c;
-    int char_len;
-    uint32_t ch;
-    int char_w;
-    bint_t i;
-    int is_tabless_ascii;
-
-    // Return early if there is no data
-    if (bline->data_len < 1) {
-        bline->char_count = 0;
-        bline->char_vwidth = 0;
-        return MLBUF_OK;
-    }
-
-    // Ensure space for chars
-    // It should have data_len elements at most
-    if (!bline->chars) {
-        bline->chars = calloc(bline->data_len, sizeof(bline_char_t));
-        bline->chars_cap = bline->data_len;
-    } else if (bline->data_len > bline->chars_cap) {
-        bline->chars = recalloc(bline->chars, bline->chars_cap, bline->data_len, sizeof(bline_char_t));
-        bline->chars_cap = bline->data_len;
-    }
-
-    // Attempt shortcut for lines with all ascii and no tabs
-    is_tabless_ascii = 1;
-    c = bline->data;
-    i = 0;
-    while (c < MLBUF_BLINE_DATA_STOP(bline)) {
-        if ((*c & 0x80) || *c == '\t') {
-            is_tabless_ascii = 0;
-            break;
-        }
-        bline->chars[i].ch = *c;
-        bline->chars[i].len = 1;
-        bline->chars[i].index = i;
-        bline->chars[i].vcol = i;
-        bline->chars[i].index_to_vcol = i;
-        i++;
-        c++;
-    }
-    bline->char_count = i;
-    bline->char_vwidth = i;
-
-    if (!is_tabless_ascii) {
-        // We encountered either non-ascii or a tab above, so we have to do a
-        // little more work.
-        while (c < MLBUF_BLINE_DATA_STOP(bline)) {
-            ch = 0;
-            char_len = utf8_char_to_unicode(&ch, c, MLBUF_BLINE_DATA_STOP(bline));
-            if (ch == '\t') {
-                // Special case for tabs
-                char_w = bline->buffer->tab_width - (bline->char_vwidth % bline->buffer->tab_width);
-            } else {
-                char_w = wcwidth(ch);
-            }
-            // Let null and non-printable chars occupy 1 column
-            if (char_w < 1) char_w = 1;
-            if (char_len < 1) char_len = 1;
-            bline->chars[bline->char_count].ch = ch;
-            bline->chars[bline->char_count].len = char_len;
-            bline->chars[bline->char_count].index = (bint_t)(c - bline->data);
-            bline->chars[bline->char_count].vcol = bline->char_vwidth;
-            for (i = 0; i < char_len; i++) if ((c - bline->data) + i < bline->data_len) {
-                bline->chars[(c - bline->data) + i].index_to_vcol = bline->char_count;
-            }
-            bline->char_count += 1;
-            bline->char_vwidth += char_w;
-            c += char_len;
-        }
-    }
-
-    return MLBUF_OK;
 }
 
 // Close self->fd and self->mmap if needed

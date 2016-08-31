@@ -26,7 +26,6 @@ struct buffer_s {
     bline_t* first_line;
     bline_t* last_line;
     bint_t byte_count;
-    bint_t char_count;
     bint_t line_count;
     srule_node_t* single_srules;
     srule_node_t* multi_srules;
@@ -46,6 +45,9 @@ struct buffer_s {
     int fd;
     char* mmap;
     size_t mmap_len;
+    bline_char_t* slabbed_chars;
+    bline_t* slabbed_blines;
+    int num_applied_srules;
     int is_in_open;
     int is_in_callback;
     int is_style_disabled;
@@ -67,6 +69,9 @@ struct bline_s {
     mark_t* marks;
     srule_t* bol_rule;
     srule_t* eol_rule;
+    int is_chars_dirty;
+    int is_slabbed;
+    int is_data_slabbed;
     bline_t* next;
     bline_t* prev;
 };
@@ -146,6 +151,7 @@ int buffer_save(buffer_t* self);
 int buffer_save_as(buffer_t* self, char* path, int path_len, bint_t* optret_nbytes);
 int buffer_get(buffer_t* self, char** ret_data, bint_t* ret_data_len);
 int buffer_set(buffer_t* self, char* data, bint_t data_len);
+int buffer_set_slabbed(buffer_t* self, char* data, bint_t data_len);
 int buffer_substr(buffer_t* self, bline_t* start_line, bint_t start_col, bline_t* end_line, bint_t end_col, char** ret_data, bint_t* ret_data_len, bint_t* ret_nchars);
 int buffer_insert(buffer_t* self, bint_t offset, char* data, bint_t data_len, bint_t* optret_num_chars);
 int buffer_delete(buffer_t* self, bint_t offset, bint_t num_chars);
@@ -162,7 +168,6 @@ int buffer_set_callback(buffer_t* self, buffer_callback_t cb, void* udata);
 int buffer_set_tab_width(buffer_t* self, int tab_width);
 int buffer_set_styles_enabled(buffer_t* self, int is_enabled);
 int buffer_apply_styles(buffer_t* self, bline_t* start_line, bint_t line_delta);
-int buffer_debug_dump(buffer_t* self, FILE* stream);
 int buffer_destroy(buffer_t* self);
 uintmax_t buffer_hash(buffer_t* self);
 
@@ -170,6 +175,8 @@ uintmax_t buffer_hash(buffer_t* self);
 int bline_insert(bline_t* self, bint_t col, char* data, bint_t data_len, bint_t* ret_num_chars);
 int bline_delete(bline_t* self, bint_t col, bint_t num_chars);
 int bline_get_col(bline_t* self, bint_t index, bint_t* ret_col);
+int bline_get_col_from_vcol(bline_t* self, bint_t vcol, bint_t* ret_col);
+int bline_count_chars(bline_t* bline);
 
 // mark functions
 int mark_clone(mark_t* self, mark_t** ret_mark);
@@ -256,6 +263,12 @@ void _mark_mark_move_inner(mark_t* mark, bline_t* bline_target, bint_t col, int 
         fprintf(stderr, "%lu [%s] ", time(0), __PRETTY_FUNCTION__); \
         fprintf(stderr, (fmt), __VA_ARGS__); \
         fflush(stderr); \
+    } \
+} while (0)
+
+#define MLBUF_BLINE_ENSURE_CHARS(b) do { \
+    if ((b)->is_chars_dirty) { \
+        bline_count_chars(b); \
     } \
 } while (0)
 

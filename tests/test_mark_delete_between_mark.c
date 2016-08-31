@@ -6,5 +6,5 @@ MAIN("hello\nworld",
     mark_move_beginning(cur);
     mark_move_end(other);
     mark_delete_between_mark(cur, other);
-    ASSERT("count", 0, buf->char_count);
+    ASSERT("count", 0, buf->byte_count);
 )

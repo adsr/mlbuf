@@ -142,7 +142,8 @@ int bline_get_col_from_vcol(bline_t* bline, bint_t vcol, bint_t* ret_col) {
     MLBUF_BLINE_ENSURE_CHARS(bline);
     for (i = 0; i < bline->char_count; i++) {
         if (vcol <= bline->chars[i].vcol) {
-            return i;
+            *ret_col = i;
+            return MLBUF_OK;
         }
     }
     *ret_col = bline->char_count;

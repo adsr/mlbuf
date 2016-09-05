@@ -1,17 +1,29 @@
 SHELL=/bin/bash
-CC=$(shell if which colorgcc>/dev/null; then echo colorgcc; else echo gcc; fi)
-
-SRCS=$(wildcard *.c)
-TESTS=$(SRCS:.c=)
+test_cflags:=$(CFLAGS) -D_GNU_SOURCE -Wall -g -I..
+test_ldflags:=$(LDFLAGS) -L..
+test_ldlibs:=$(LDLIBS) -lmlbuf -lpcre
+test_bins:=$(patsubst %.c,%,$(wildcard *.c))
 
 all: run
 
-run: $(TESTS)
-	find . -type f -executable -print0 | xargs -0 -n1 -I{} sh -c 'tput bold; echo TEST {}; tput sgr0; LD_LIBRARY_PATH=.. {}; ec=$$?; echo; exit $$ec'
+run: $(test_bins)
+	total=0; \
+	pass=0; \
+	for t in $(test_bins); do \
+		tput bold; echo TEST $$t; tput sgr0; \
+		LD_LIBRARY_PATH=.. ./$$t; ec=$$?; echo; \
+		[ $$ec -eq 0 ] && pass=$$((pass+1)); \
+		total=$$((total+1)); \
+	done; \
+	printf "Passed %d out of %d tests\n" $$pass $$total
 
-$(TESTS): $(SRCS)
-	$(CC) -g -Wall -I.. -L.. $@.c -o $@ -lmlbuf -lpcre
+$(test_bins): %: %.c ../libmlbuf.so
+	$(CC) $(test_cflags) $(test_ldflags) $< -o $@ $(test_ldlibs)
+
+../libmlbuf.so:
+	$(MAKE) -C ..
 
 clean:
-	rm -f *.o
-	find . -type f -executable -exec rm -f {} \;
+	rm -f $(test_bins)
+
+.PHONY: all run clean

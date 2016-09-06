@@ -149,6 +149,8 @@ int buffer_destroy_mark(buffer_t* self, mark_t* mark);
 int buffer_open(buffer_t* self, char* path);
 int buffer_save(buffer_t* self);
 int buffer_save_as(buffer_t* self, char* path, bint_t* optret_nbytes);
+int buffer_write_to_file(buffer_t* self, FILE* fp, size_t* optret_nbytes);
+int buffer_write_to_fd(buffer_t* self, int fd, size_t* optret_nbytes);
 int buffer_get(buffer_t* self, char** ret_data, bint_t* ret_data_len);
 int buffer_clear(buffer_t* self);
 int buffer_set(buffer_t* self, char* data, bint_t data_len);

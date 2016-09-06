@@ -129,7 +129,6 @@ int buffer_save(buffer_t* self) {
 int buffer_save_as(buffer_t* self, char* path, bint_t* optret_nbytes) {
     FILE* fp;
     size_t nbytes;
-    bline_t* bline;
 
     if (optret_nbytes) *optret_nbytes = 0;
 
@@ -143,12 +142,8 @@ int buffer_save_as(buffer_t* self, char* path, bint_t* optret_nbytes) {
         return MLBUF_ERR;
     }
 
-    // Write bline data to file
-    nbytes = 0;
-    for (bline = self->first_line; bline; bline = bline->next) {
-        if (bline->data_len > 0) nbytes += fwrite(bline->data, sizeof(char), bline->data_len, fp);
-        if (bline->next)         nbytes += fwrite("\n", sizeof(char), 1, fp);
-    }
+    // Write data to file
+    buffer_write_to_file(self, fp, &nbytes);
     fclose(fp);
     if (optret_nbytes) *optret_nbytes = (bint_t)nbytes;
     if (nbytes != self->byte_count) return MLBUF_ERR;
@@ -161,6 +156,32 @@ int buffer_save_as(buffer_t* self, char* path, bint_t* optret_nbytes) {
     // Remember stat
     _buffer_stat(self);
 
+    return MLBUF_OK;
+}
+
+// Write buffer data to FILE*
+int buffer_write_to_file(buffer_t* self, FILE* fp, size_t* optret_nbytes) {
+    return buffer_write_to_fd(self, fileno(fp), optret_nbytes);
+}
+
+// Write buffer data to file descriptor
+int buffer_write_to_fd(buffer_t* self, int fd, size_t* optret_nbytes) {
+    bline_t* bline;
+    size_t nbytes;
+    ssize_t write_rc;
+    nbytes = 0;
+    #define MLBUF_BUFFER_WRITE_CHECK(pd, pl) do { \
+        write_rc = write(fd, (pd), (pl)); \
+        if (write_rc < (pl)) { \
+            return MLBUF_ERR; \
+        } \
+        nbytes += write_rc; \
+    } while(0)
+    for (bline = self->first_line; bline; bline = bline->next) {
+        if (bline->data_len > 0) MLBUF_BUFFER_WRITE_CHECK(bline->data, bline->data_len);
+        if (bline->next)         MLBUF_BUFFER_WRITE_CHECK("\n", 1);
+    }
+    if (optret_nbytes) *optret_nbytes = nbytes;
     return MLBUF_OK;
 }
 

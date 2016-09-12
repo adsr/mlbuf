@@ -215,8 +215,9 @@ mark_t* buffer_add_mark(buffer_t* self, bline_t* maybe_line, bint_t maybe_col) {
     mark = calloc(1, sizeof(mark_t));
     MLBUF_MAKE_GT_EQ0(maybe_col);
     if (maybe_line != NULL) {
+        MLBUF_BLINE_ENSURE_CHARS(maybe_line);
         mark->bline = maybe_line;
-        mark->col = maybe_col;
+        mark->col = maybe_col < 0 ? 0 : MLBUF_MIN(maybe_line->char_count, maybe_col);
     } else {
         mark->bline = self->first_line;
         mark->col = 0;

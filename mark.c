@@ -52,6 +52,12 @@ int mark_delete_before(mark_t* self, bint_t num_chars) {
     return rc;
 }
 
+// Move mark to bline:col
+int mark_move_to_w_bline(mark_t* self, bline_t* bline, bint_t col) {
+    _mark_mark_move_inner(self, bline, col, 1, 1);
+    return MLBUF_OK;
+}
+
 // Move mark to line_index:col
 int mark_move_to(mark_t* self, bint_t line_index, bint_t col) {
     bline_t* bline;

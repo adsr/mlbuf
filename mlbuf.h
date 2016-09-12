@@ -188,6 +188,7 @@ int mark_insert_after(mark_t* self, char* data, bint_t data_len);
 int mark_delete_before(mark_t* self, bint_t num_chars);
 int mark_delete_after(mark_t* self, bint_t num_chars);
 int mark_move_to(mark_t* self, bint_t line_index, bint_t col);
+int mark_move_to_w_bline(mark_t* self, bline_t* bline, bint_t col);
 int mark_move_by(mark_t* self, bint_t char_delta);
 int mark_move_vert(mark_t* self, bint_t line_delta);
 int mark_move_bol(mark_t* self);

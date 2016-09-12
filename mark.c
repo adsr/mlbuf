@@ -23,6 +23,12 @@ int mark_clone(mark_t* self, mark_t** ret_mark) {
     return MLBUF_OK;
 }
 
+// Return a lettered clone (same position) of an existing mark
+int mark_clone_w_letter(mark_t* self, char letter, mark_t** ret_mark) {
+    *ret_mark = buffer_add_lettered_mark(self->bline->buffer, letter, self->bline, self->col);
+    return MLBUF_OK;
+}
+
 // Insert data before mark
 int mark_insert_before(mark_t* self, char* data, bint_t data_len) {
     return bline_insert(self->bline, self->col, data, data_len, NULL);
@@ -195,6 +201,16 @@ int mark_is_eq(mark_t* self, mark_t* other) {
         return self->col == other->col ? 1 : 0;
     }
     return 0;
+}
+
+// Return 1 if self >= other
+int mark_is_gte(mark_t* self, mark_t* other) {
+    return !mark_is_lt(self, other);
+}
+
+// Return 1 if self <= other
+int mark_is_lte(mark_t* self, mark_t* other) {
+    return !mark_is_gt(self, other);
 }
 
 // Find top-level bracket to the left examining no more than max_chars
@@ -393,39 +409,55 @@ int mark_destroy(mark_t* self) {
     return buffer_destroy_mark(self->bline->buffer, self);
 }
 
-#define MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND(mark, findfn, ...) \
+#define MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND_EX(mark, findfn, ...) do { \
     int rc; \
-    bline_t* line; \
-    bint_t col; \
-    bint_t char_count; \
+    bline_t* line = NULL; \
+    bint_t col = 0; \
+    bint_t char_count = 0; \
     if ((rc = (findfn)((mark), __VA_ARGS__, &line, &col, &char_count)) == MLBUF_OK) { \
         _mark_mark_move_inner((mark), line, col, 1, 1); \
         return MLBUF_OK; \
     } \
-    return rc;
+    if (optret_line) *optret_line = line; \
+    if (optret_col) *optret_col = col; \
+    if (optret_char_count) *optret_char_count = char_count; \
+    return rc; \
+} while(0)
+
+#define MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND(mark, findfn, ...) do { \
+    int rc; \
+    bline_t* line = NULL; \
+    bint_t col = 0; \
+    bint_t char_count = 0; \
+    if ((rc = (findfn)((mark), __VA_ARGS__, &line, &col, &char_count)) == MLBUF_OK) { \
+        _mark_mark_move_inner((mark), line, col, 1, 1); \
+        return MLBUF_OK; \
+    } \
+    return rc; \
+} while(0)
 
 int mark_move_next_str(mark_t* self, char* str, bint_t str_len) {
-    MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_next_str, str, str_len)
+    MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_next_str, str, str_len);
 }
 
 int mark_move_prev_str(mark_t* self, char* str, bint_t str_len) {
-    MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_prev_str, str, str_len)
+    MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_prev_str, str, str_len);
 }
 
 int mark_move_next_cre(mark_t* self, pcre* cre) {
-    MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_next_cre, cre)
+    MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_next_cre, cre);
 }
 
 int mark_move_prev_cre(mark_t* self, pcre* cre) {
-    MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_prev_cre, cre)
+    MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_prev_cre, cre);
 }
 
 int mark_move_next_re(mark_t* self, char* re, bint_t re_len) {
-    MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_next_re, re, re_len)
+    MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_next_re, re, re_len);
 }
 
 int mark_move_prev_re(mark_t* self, char* re, bint_t re_len) {
-    MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_prev_re, re, re_len)
+    MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_prev_re, re, re_len);
 }
 
 int mark_move_bracket_pair(mark_t* self, bint_t max_chars) {
@@ -434,6 +466,38 @@ int mark_move_bracket_pair(mark_t* self, bint_t max_chars) {
 
 int mark_move_bracket_top(mark_t* self, bint_t max_chars) {
     MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_bracket_top, max_chars);
+}
+
+int mark_move_next_str_ex(mark_t* self, char* str, bint_t str_len, bline_t** optret_line, bint_t* optret_col, bint_t* optret_char_count) {
+    MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND_EX(self, mark_find_next_str, str, str_len);
+}
+
+int mark_move_prev_str_ex(mark_t* self, char* str, bint_t str_len, bline_t** optret_line, bint_t* optret_col, bint_t* optret_char_count) {
+    MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND_EX(self, mark_find_prev_str, str, str_len);
+}
+
+int mark_move_next_cre_ex(mark_t* self, pcre* cre, bline_t** optret_line, bint_t* optret_col, bint_t* optret_char_count) {
+    MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND_EX(self, mark_find_next_cre, cre);
+}
+
+int mark_move_prev_cre_ex(mark_t* self, pcre* cre, bline_t** optret_line, bint_t* optret_col, bint_t* optret_char_count) {
+    MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND_EX(self, mark_find_prev_cre, cre);
+}
+
+int mark_move_next_re_ex(mark_t* self, char* re, bint_t re_len, bline_t** optret_line, bint_t* optret_col, bint_t* optret_char_count) {
+    MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND_EX(self, mark_find_next_re, re, re_len);
+}
+
+int mark_move_prev_re_ex(mark_t* self, char* re, bint_t re_len, bline_t** optret_line, bint_t* optret_col, bint_t* optret_char_count) {
+    MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND_EX(self, mark_find_prev_re, re, re_len);
+}
+
+int mark_move_bracket_pair_ex(mark_t* self, bint_t max_chars, bline_t** optret_line, bint_t* optret_col, bint_t* optret_char_count) {
+    MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND_EX(self, mark_find_bracket_pair, max_chars);
+}
+
+int mark_move_bracket_top_ex(mark_t* self, bint_t max_chars, bline_t** optret_line, bint_t* optret_col, bint_t* optret_char_count) {
+    MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND_EX(self, mark_find_bracket_top, max_chars);
 }
 
 // Return 1 if mark is at a word boundary. If side <= -1, return 1 only for

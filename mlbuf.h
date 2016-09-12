@@ -32,6 +32,7 @@ struct buffer_s {
     baction_t* actions;
     baction_t* action_tail;
     baction_t* action_undone;
+    mark_t* lettered_marks;
     char* path;
     struct stat st;
     int is_unsaved;
@@ -51,7 +52,6 @@ struct buffer_s {
     int is_in_open;
     int is_in_callback;
     int is_style_disabled;
-    char _mark_counter;
     int _is_in_undo;
 };
 
@@ -120,6 +120,8 @@ struct mark_s {
     char letter;
     mark_t* next;
     mark_t* prev;
+    mark_t* lettered_next;
+    mark_t* lettered_prev;
 };
 
 // srule_t
@@ -145,6 +147,8 @@ struct srule_node_s {
 buffer_t* buffer_new();
 buffer_t* buffer_new_open(char* path);
 mark_t* buffer_add_mark(buffer_t* self, bline_t* maybe_line, bint_t maybe_col);
+mark_t* buffer_add_lettered_mark(buffer_t* self, char letter, bline_t* maybe_line, bint_t maybe_col);
+mark_t* buffer_find_lettered_mark(buffer_t* self, char letter);
 int buffer_destroy_mark(buffer_t* self, mark_t* mark);
 int buffer_open(buffer_t* self, char* path);
 int buffer_save(buffer_t* self);
@@ -183,6 +187,7 @@ int bline_count_chars(bline_t* bline);
 
 // mark functions
 int mark_clone(mark_t* self, mark_t** ret_mark);
+int mark_clone_w_letter(mark_t* self, char letter, mark_t** ret_mark);
 int mark_insert_before(mark_t* self, char* data, bint_t data_len);
 int mark_insert_after(mark_t* self, char* data, bint_t data_len);
 int mark_delete_before(mark_t* self, bint_t num_chars);
@@ -213,12 +218,22 @@ int mark_move_next_re(mark_t* self, char* re, bint_t re_len);
 int mark_move_prev_re(mark_t* self, char* re, bint_t re_len);
 int mark_move_bracket_pair(mark_t* self, bint_t max_chars);
 int mark_move_bracket_top(mark_t* self, bint_t max_chars);
+int mark_move_next_str_ex(mark_t* self, char* str, bint_t str_len, bline_t** optret_line, bint_t* optret_col, bint_t* optret_num_chars);
+int mark_move_prev_str_ex(mark_t* self, char* str, bint_t str_len, bline_t** optret_line, bint_t* optret_col, bint_t* optret_num_chars);
+int mark_move_next_cre_ex(mark_t* self, pcre* cre, bline_t** optret_line, bint_t* optret_col, bint_t* optret_num_chars);
+int mark_move_prev_cre_ex(mark_t* self, pcre* cre, bline_t** optret_line, bint_t* optret_col, bint_t* optret_num_chars);
+int mark_move_next_re_ex(mark_t* self, char* re, bint_t re_len, bline_t** optret_line, bint_t* optret_col, bint_t* optret_num_chars);
+int mark_move_prev_re_ex(mark_t* self, char* re, bint_t re_len, bline_t** optret_line, bint_t* optret_col, bint_t* optret_num_chars);
+int mark_move_bracket_pair_ex(mark_t* self, bint_t max_chars, bline_t** optret_line, bint_t* optret_col, bint_t* optret_num_chars);
+int mark_move_bracket_top_ex(mark_t* self, bint_t max_chars, bline_t** optret_line, bint_t* optret_col, bint_t* optret_num_chars);
 int mark_get_offset(mark_t* self, bint_t* ret_offset);
 int mark_delete_between_mark(mark_t* self, mark_t* other);
 int mark_get_between_mark(mark_t* self, mark_t* other, char** ret_str, bint_t* ret_str_len);
 int mark_is_lt(mark_t* self, mark_t* other);
 int mark_is_gt(mark_t* self, mark_t* other);
 int mark_is_eq(mark_t* self, mark_t* other);
+int mark_is_gte(mark_t* self, mark_t* other);
+int mark_is_lte(mark_t* self, mark_t* other);
 int mark_join(mark_t* self, mark_t* other);
 int mark_swap_with_mark(mark_t* self, mark_t* other);
 int mark_is_at_eol(mark_t* self);

@@ -46,7 +46,6 @@ buffer_t* buffer_new() {
     buffer->last_line = bline;
     buffer->line_count = 1;
     buffer->mmap_fd = -1;
-    buffer->_mark_counter = 'a';
     return buffer;
 }
 
@@ -211,7 +210,13 @@ int buffer_destroy(buffer_t* self) {
 
 // Add a mark to this buffer and return it
 mark_t* buffer_add_mark(buffer_t* self, bline_t* maybe_line, bint_t maybe_col) {
+    return buffer_add_lettered_mark(self, '\0', maybe_line, maybe_col);
+}
+
+// Add a lettered mark
+mark_t* buffer_add_lettered_mark(buffer_t* self, char letter, bline_t* maybe_line, bint_t maybe_col) {
     mark_t* mark;
+    mark_t* mark_tmp;
     mark = calloc(1, sizeof(mark_t));
     MLBUF_MAKE_GT_EQ0(maybe_col);
     if (maybe_line != NULL) {
@@ -222,13 +227,24 @@ mark_t* buffer_add_mark(buffer_t* self, bline_t* maybe_line, bint_t maybe_col) {
         mark->bline = self->first_line;
         mark->col = 0;
     }
-    mark->letter = self->_mark_counter;
-    self->_mark_counter += 1;
-    if (self->_mark_counter > 'z') {
-        self->_mark_counter = 'a';
-    }
+    mark->letter = letter;
     DL_APPEND(mark->bline->marks, mark);
+    if (mark->letter) {
+        mark_tmp = buffer_find_lettered_mark(self, mark->letter);
+        if (mark_tmp) buffer_destroy_mark(self, mark_tmp);
+        DL_APPEND2(self->lettered_marks, mark, lettered_prev, lettered_next);
+    }
     return mark;
+}
+
+// Find mark with letter or NULL if not found
+mark_t* buffer_find_lettered_mark(buffer_t* self, char letter) {
+    mark_t* mark;
+    if (!letter) return NULL;
+    DL_FOREACH2(self->lettered_marks, mark, lettered_next) {
+        if (mark->letter == letter) return mark;
+    }
+    return NULL;
 }
 
 // Remove mark from buffer and free it, removing any range srules that use it
@@ -236,6 +252,9 @@ int buffer_destroy_mark(buffer_t* self, mark_t* mark) {
     srule_node_t* node;
     srule_node_t* node_tmp;
     DL_DELETE(mark->bline->marks, mark);
+    if (mark->letter) {
+        DL_DELETE2(self->lettered_marks, mark, lettered_prev, lettered_next);
+    }
     DL_FOREACH_SAFE(self->multi_srules, node, node_tmp) {
         if (node->srule->type == MLBUF_SRULE_TYPE_RANGE
             && (node->srule->range_a == mark
@@ -1317,8 +1336,7 @@ static int _buffer_bline_free(bline_t* bline, bline_t* maybe_mark_line, bint_t c
             if (maybe_mark_line) {
                 _mark_mark_move_inner(mark, maybe_mark_line, mark->col + col_delta, 1, 0);
             } else {
-                DL_DELETE(bline->marks, mark);
-                free(mark);
+                buffer_destroy_mark(bline->buffer, mark);
             }
         }
     }

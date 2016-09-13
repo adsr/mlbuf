@@ -240,6 +240,13 @@ mark_t* buffer_add_lettered_mark(buffer_t* self, char letter, bline_t* maybe_lin
     return mark;
 }
 
+// Return lettered mark or NULL if it does not exist
+int buffer_get_lettered_mark(buffer_t* self, char letter, mark_t** ret_mark) {
+    MLBUF_ENSURE_AZ(letter);
+    *ret_mark = MLBUF_LETT_MARK(self, letter);
+    return MLBUF_OK;
+}
+
 // Remove mark from buffer and free it, removing any range srules that use it
 int buffer_destroy_mark(buffer_t* self, mark_t* mark) {
     srule_node_t* node;
@@ -902,28 +909,28 @@ int buffer_apply_styles(buffer_t* self, bline_t* start_line, bint_t line_delta) 
 
 // Set register
 int buffer_register_set(buffer_t* self, char reg, char* data, size_t data_len) {
-    MLBUF_REG_ENSURE_CHAR(reg);
+    MLBUF_ENSURE_AZ(reg);
     str_set_len(MLBUF_REG_PTR(self, reg), data, data_len);
     return MLBUF_OK;
 }
 
 // Append to register
 int buffer_register_append(buffer_t* self, char reg, char* data, size_t data_len) {
-    MLBUF_REG_ENSURE_CHAR(reg);
+    MLBUF_ENSURE_AZ(reg);
     str_append_len(MLBUF_REG_PTR(self, reg), data, data_len);
     return MLBUF_OK;
 }
 
 // Prepend to register
 int buffer_register_prepend(buffer_t* self, char reg, char* data, size_t data_len) {
-    MLBUF_REG_ENSURE_CHAR(reg);
+    MLBUF_ENSURE_AZ(reg);
     str_prepend_len(MLBUF_REG_PTR(self, reg), data, data_len);
     return MLBUF_OK;
 }
 
 // Clear register
 int buffer_register_clear(buffer_t* self, char reg) {
-    MLBUF_REG_ENSURE_CHAR(reg);
+    MLBUF_ENSURE_AZ(reg);
     str_free(MLBUF_REG_PTR(self, reg));
     return MLBUF_OK;
 }
@@ -931,7 +938,7 @@ int buffer_register_clear(buffer_t* self, char reg) {
 // Get register, optionally allocating data
 int buffer_register_get(buffer_t* self, char reg, int dup, char** ret_data, size_t* ret_data_len) {
     str_t* sreg;
-    MLBUF_REG_ENSURE_CHAR(reg);
+    MLBUF_ENSURE_AZ(reg);
     sreg = &self->registers[(int)reg];
     if (dup) {
         *ret_data = strndup(sreg->data, sreg->len);

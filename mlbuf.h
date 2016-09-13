@@ -157,7 +157,7 @@ buffer_t* buffer_new();
 buffer_t* buffer_new_open(char* path);
 mark_t* buffer_add_mark(buffer_t* self, bline_t* maybe_line, bint_t maybe_col);
 mark_t* buffer_add_lettered_mark(buffer_t* self, char letter, bline_t* maybe_line, bint_t maybe_col);
-mark_t* buffer_find_lettered_mark(buffer_t* self, char letter);
+int buffer_get_lettered_mark(buffer_t* self, char letter, mark_t** ret_mark);
 int buffer_destroy_mark(buffer_t* self, mark_t* mark);
 int buffer_open(buffer_t* self, char* path);
 int buffer_save(buffer_t* self);
@@ -326,8 +326,8 @@ void str_append_replace_with_backrefs(str_t* str, char* subj, char* repl, int pc
 #define MLBUF_INIT_PCRE_EXTRA(n) \
     pcre_extra n = { .flags = PCRE_EXTRA_MATCH_LIMIT_RECURSION, .match_limit_recursion = 256 }
 
-#define MLBUF_REG_ENSURE_CHAR(reg) \
-    if ((reg) < 'a' || (reg) > 'z') return MLBUF_ERR
+#define MLBUF_ENSURE_AZ(c) \
+    if ((c) < 'a' || (c) > 'z') return MLBUF_ERR
 
 #define MLBUF_REG_PTR(buf, lett) \
     &((buf)->registers[(lett) - 'a'])

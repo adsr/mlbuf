@@ -18,8 +18,16 @@ typedef struct mark_s mark_t; // A mark in a buffer
 typedef struct srule_s srule_t; // A style rule
 typedef struct srule_node_s srule_node_t; // A node in a list of style rules
 typedef struct sblock_s sblock_t; // A style of a particular character
+typedef struct str_s str_t; // A dynamically resizeable string
 typedef void (*buffer_callback_t)(buffer_t* buffer, baction_t* action, void* udata);
 typedef intmax_t bint_t;
+
+// str_t
+struct str_s {
+    char* data;
+    size_t len;
+    size_t cap;
+};
 
 // buffer_t
 struct buffer_s {
@@ -32,7 +40,8 @@ struct buffer_s {
     baction_t* actions;
     baction_t* action_tail;
     baction_t* action_undone;
-    mark_t* lettered_marks;
+    str_t registers[26];
+    mark_t* lettered_marks[26];
     char* path;
     struct stat st;
     int is_unsaved;
@@ -120,8 +129,6 @@ struct mark_s {
     char letter;
     mark_t* next;
     mark_t* prev;
-    mark_t* lettered_next;
-    mark_t* lettered_prev;
 };
 
 // srule_t
@@ -137,6 +144,8 @@ struct srule_s {
     mark_t* range_b;
     sblock_t style;
 };
+
+// srule_node_t
 struct srule_node_s {
     srule_t* srule;
     srule_node_t* next;
@@ -175,6 +184,11 @@ int buffer_set_callback(buffer_t* self, buffer_callback_t cb, void* udata);
 int buffer_set_tab_width(buffer_t* self, int tab_width);
 int buffer_set_styles_enabled(buffer_t* self, int is_enabled);
 int buffer_apply_styles(buffer_t* self, bline_t* start_line, bint_t line_delta);
+int buffer_register_set(buffer_t* self, char reg, char* data, size_t data_len);
+int buffer_register_append(buffer_t* self, char reg, char* data, size_t data_len);
+int buffer_register_prepend(buffer_t* self, char reg, char* data, size_t data_len);
+int buffer_register_clear(buffer_t* self, char reg);
+int buffer_register_get(buffer_t* self, char reg, int dup, char** ret_data, size_t* ret_data_len);
 int buffer_destroy(buffer_t* self);
 uintmax_t buffer_hash(buffer_t* self);
 
@@ -258,6 +272,19 @@ int utf8_unicode_to_char(char *out, uint32_t c);
 // util functions
 void* recalloc(void* ptr, size_t orig_num, size_t new_num, size_t el_size);
 void _mark_mark_move_inner(mark_t* mark, bline_t* bline_target, bint_t col, int do_set_target, int do_style);
+void str_append_stop(str_t* str, char* data, char* data_stop);
+void str_append(str_t* str, char* data);
+void str_append_len(str_t* str, char* data, size_t data_len);
+void str_prepend_stop(str_t* str, char* data, char* data_stop);
+void str_prepend(str_t* str, char* data);
+void str_prepend_len(str_t* str, char* data, size_t data_len);
+void str_set(str_t* str, char* data);
+void str_set_len(str_t* str, char* data, size_t data_len);
+void str_put_len(str_t* str, char* data, size_t data_len, int is_prepend);
+void str_ensure_cap(str_t* str, size_t cap);
+void str_clear(str_t* str);
+void str_free(str_t* str);
+void str_append_replace_with_backrefs(str_t* str, char* subj, char* repl, int pcre_rc, int* pcre_ovector, int pcre_ovecsize);
 
 // Macros
 #define MLBUF_DEBUG 1
@@ -298,6 +325,15 @@ void _mark_mark_move_inner(mark_t* mark, bline_t* bline_target, bint_t col, int 
 
 #define MLBUF_INIT_PCRE_EXTRA(n) \
     pcre_extra n = { .flags = PCRE_EXTRA_MATCH_LIMIT_RECURSION, .match_limit_recursion = 256 }
+
+#define MLBUF_REG_ENSURE_CHAR(reg) \
+    if ((reg) < 'a' || (reg) > 'z') return MLBUF_ERR
+
+#define MLBUF_REG_PTR(buf, lett) \
+    &((buf)->registers[(lett) - 'a'])
+
+#define MLBUF_LETT_MARK(buf, lett) \
+    (buf)->lettered_marks[(lett) - 'a']
 
 #ifndef PCRE_STUDY_JIT_COMPILE
 #define PCRE_STUDY_JIT_COMPILE 0

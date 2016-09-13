@@ -190,6 +190,7 @@ int buffer_destroy(buffer_t* self) {
     bline_t* line_tmp;
     baction_t* action;
     baction_t* action_tmp;
+    char c;
     for (line = self->last_line; line; ) {
         line_tmp = line->prev;
         _buffer_bline_free(line, NULL, 0);
@@ -201,6 +202,7 @@ int buffer_destroy(buffer_t* self) {
         DL_DELETE(self->actions, action);
         _baction_destroy(action);
     }
+    for (c = 'a'; c <= 'z'; c++) buffer_register_clear(self, c);
     _buffer_munmap(self);
     if (self->slabbed_blines) free(self->slabbed_blines);
     if (self->slabbed_chars) free(self->slabbed_chars);
@@ -213,11 +215,12 @@ mark_t* buffer_add_mark(buffer_t* self, bline_t* maybe_line, bint_t maybe_col) {
     return buffer_add_lettered_mark(self, '\0', maybe_line, maybe_col);
 }
 
-// Add a lettered mark
+// Add a lettered mark. Ignore letter if not [a..z].
 mark_t* buffer_add_lettered_mark(buffer_t* self, char letter, bline_t* maybe_line, bint_t maybe_col) {
     mark_t* mark;
     mark_t* mark_tmp;
     mark = calloc(1, sizeof(mark_t));
+    mark->letter = letter >= 'a' && letter <= 'z' ? letter : '\0';
     MLBUF_MAKE_GT_EQ0(maybe_col);
     if (maybe_line != NULL) {
         MLBUF_BLINE_ENSURE_CHARS(maybe_line);
@@ -227,24 +230,14 @@ mark_t* buffer_add_lettered_mark(buffer_t* self, char letter, bline_t* maybe_lin
         mark->bline = self->first_line;
         mark->col = 0;
     }
-    mark->letter = letter;
     DL_APPEND(mark->bline->marks, mark);
     if (mark->letter) {
-        mark_tmp = buffer_find_lettered_mark(self, mark->letter);
-        if (mark_tmp) buffer_destroy_mark(self, mark_tmp);
-        DL_APPEND2(self->lettered_marks, mark, lettered_prev, lettered_next);
+        if ((mark_tmp = MLBUF_LETT_MARK(self, mark->letter)) != NULL) {
+            buffer_destroy_mark(self, mark_tmp);
+        }
+        MLBUF_LETT_MARK(self, mark->letter) = mark;
     }
     return mark;
-}
-
-// Find mark with letter or NULL if not found
-mark_t* buffer_find_lettered_mark(buffer_t* self, char letter) {
-    mark_t* mark;
-    if (!letter) return NULL;
-    DL_FOREACH2(self->lettered_marks, mark, lettered_next) {
-        if (mark->letter == letter) return mark;
-    }
-    return NULL;
 }
 
 // Remove mark from buffer and free it, removing any range srules that use it
@@ -252,9 +245,7 @@ int buffer_destroy_mark(buffer_t* self, mark_t* mark) {
     srule_node_t* node;
     srule_node_t* node_tmp;
     DL_DELETE(mark->bline->marks, mark);
-    if (mark->letter) {
-        DL_DELETE2(self->lettered_marks, mark, lettered_prev, lettered_next);
-    }
+    if (mark->letter) MLBUF_LETT_MARK(self, mark->letter) = NULL;
     DL_FOREACH_SAFE(self->multi_srules, node, node_tmp) {
         if (node->srule->type == MLBUF_SRULE_TYPE_RANGE
             && (node->srule->range_a == mark
@@ -906,6 +897,49 @@ int buffer_apply_styles(buffer_t* self, bline_t* start_line, bint_t line_delta) 
         self->num_applied_srules = srule_count;
     }
 
+    return MLBUF_OK;
+}
+
+// Set register
+int buffer_register_set(buffer_t* self, char reg, char* data, size_t data_len) {
+    MLBUF_REG_ENSURE_CHAR(reg);
+    str_set_len(MLBUF_REG_PTR(self, reg), data, data_len);
+    return MLBUF_OK;
+}
+
+// Append to register
+int buffer_register_append(buffer_t* self, char reg, char* data, size_t data_len) {
+    MLBUF_REG_ENSURE_CHAR(reg);
+    str_append_len(MLBUF_REG_PTR(self, reg), data, data_len);
+    return MLBUF_OK;
+}
+
+// Prepend to register
+int buffer_register_prepend(buffer_t* self, char reg, char* data, size_t data_len) {
+    MLBUF_REG_ENSURE_CHAR(reg);
+    str_prepend_len(MLBUF_REG_PTR(self, reg), data, data_len);
+    return MLBUF_OK;
+}
+
+// Clear register
+int buffer_register_clear(buffer_t* self, char reg) {
+    MLBUF_REG_ENSURE_CHAR(reg);
+    str_free(MLBUF_REG_PTR(self, reg));
+    return MLBUF_OK;
+}
+
+// Get register, optionally allocating data
+int buffer_register_get(buffer_t* self, char reg, int dup, char** ret_data, size_t* ret_data_len) {
+    str_t* sreg;
+    MLBUF_REG_ENSURE_CHAR(reg);
+    sreg = &self->registers[(int)reg];
+    if (dup) {
+        *ret_data = strndup(sreg->data, sreg->len);
+        *ret_data_len = strlen(*ret_data);
+    } else {
+        *ret_data = sreg->len > 0 ? sreg->data : "";
+        *ret_data_len = sreg->len;
+    }
     return MLBUF_OK;
 }
 

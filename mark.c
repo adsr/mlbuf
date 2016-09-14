@@ -416,11 +416,11 @@ int mark_destroy(mark_t* self) {
     bint_t char_count = 0; \
     if ((rc = (findfn)((mark), __VA_ARGS__, &line, &col, &char_count)) == MLBUF_OK) { \
         _mark_mark_move_inner((mark), line, col, 1, 1); \
+        if (optret_line) *optret_line = line; \
+        if (optret_col) *optret_col = col; \
+        if (optret_char_count) *optret_char_count = char_count; \
         return MLBUF_OK; \
     } \
-    if (optret_line) *optret_line = line; \
-    if (optret_col) *optret_col = col; \
-    if (optret_char_count) *optret_char_count = char_count; \
     return rc; \
 } while(0)
 

@@ -220,7 +220,10 @@ mark_t* buffer_add_lettered_mark(buffer_t* self, char letter, bline_t* maybe_lin
     mark_t* mark;
     mark_t* mark_tmp;
     mark = calloc(1, sizeof(mark_t));
-    mark->letter = letter >= 'a' && letter <= 'z' ? letter : '\0';
+    if (!((letter >= 'a' && letter <= 'z') || letter == '\0')) {
+        return NULL;
+    }
+    mark->letter = letter;
     MLBUF_MAKE_GT_EQ0(maybe_col);
     if (maybe_line != NULL) {
         MLBUF_BLINE_ENSURE_CHARS(maybe_line);

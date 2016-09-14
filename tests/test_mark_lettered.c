@@ -14,8 +14,7 @@ MAIN("hello\nworld",
     ASSERT("neq2", 1, lett1 != lett2 ? 1 : 0);
 
     mark_clone_w_letter(cur, '?', &lett3);
-    ASSERT("ig", '\0', lett3->letter);
+    ASSERT("null", 1, lett3 == NULL ? 1 : 0);
 
     mark_destroy(lett2);
-    mark_destroy(lett3);
 )

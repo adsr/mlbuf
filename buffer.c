@@ -25,6 +25,7 @@ static int _buffer_bline_apply_style_multi(srule_t* srule, bline_t* bline, srule
 static bline_t* _buffer_bline_new(buffer_t* self);
 static int _buffer_bline_free(bline_t* bline, bline_t* maybe_mark_line, bint_t col_delta);
 static bline_t* _buffer_bline_break(bline_t* bline, bint_t col);
+static void _buffer_find_end_pos(bline_t* start_line, bint_t start_col, bint_t num_chars, bline_t** ret_end_line, bint_t* ret_end_col, bint_t* ret_safe_num_chars);
 static bint_t _buffer_bline_insert(bline_t* bline, bint_t col, char* data, bint_t data_len, int move_marks);
 static bint_t _buffer_bline_delete(bline_t* bline, bint_t col, bint_t num_chars);
 static bint_t _buffer_bline_col_to_index(bline_t* bline, bint_t col);
@@ -492,7 +493,6 @@ int buffer_delete(buffer_t* self, bint_t offset, bint_t num_chars) {
 int buffer_delete_w_bline(buffer_t* self, bline_t* start_line, bint_t start_col, bint_t num_chars) {
     bline_t* end_line;
     bint_t end_col;
-    bint_t num_chars_rem;
     bline_t* tmp_line;
     bline_t* swap_line;
     bline_t* next_line;
@@ -507,26 +507,7 @@ int buffer_delete_w_bline(buffer_t* self, bline_t* start_line, bint_t start_col,
     MLBUF_MAKE_GT_EQ0(num_chars);
 
     // Find end line and col
-    end_line = start_line;
-    end_col = start_col;
-    num_chars_rem = num_chars;
-    while (num_chars_rem > 0) {
-        MLBUF_BLINE_ENSURE_CHARS(end_line);
-        if (end_line->char_count - end_col >= num_chars_rem) {
-            end_col += num_chars_rem;
-            num_chars_rem = 0;
-        } else {
-            num_chars_rem -= (end_line->char_count - end_col) + 1;
-            if (end_line->next) {
-                end_line = end_line->next;
-                end_col = 0;
-            } else {
-                end_col = end_line->char_count;
-                break;
-            }
-        }
-    }
-    num_chars -= num_chars_rem;
+    _buffer_find_end_pos(start_line, start_col, num_chars, &end_line, &end_col, &num_chars);
 
     // Exit early if there is nothing to delete
     MLBUF_BLINE_ENSURE_CHARS(self->last_line);
@@ -589,6 +570,82 @@ int buffer_delete_w_bline(buffer_t* self, bline_t* start_line, bint_t start_col,
     _buffer_update(self, action);
 
     return MLBUF_OK;
+}
+
+// Replace num_chars in buffer at offset with data
+int buffer_replace(buffer_t* self, bint_t offset, bint_t num_chars, char* data, bint_t data_len) {
+    int rc;
+    bline_t* start_line;
+    bint_t start_col;
+    MLBUF_MAKE_GT_EQ0(offset);
+
+    // Find start line and col
+    if ((rc = buffer_get_bline_col(self, offset, &start_line, &start_col)) != MLBUF_OK) {
+        return rc;
+    }
+
+    return buffer_replace_w_bline(self, start_line, start_col, num_chars, data, data_len);
+}
+
+// Replace num_chars from start_line:start_col with data
+int buffer_replace_w_bline(buffer_t* self, bline_t* start_line, bint_t start_col, bint_t num_chars, char* data, bint_t data_len) {
+    // 1. find end_line:end_col using start_line:start_col+num_chars (dlines)
+    // 2. find num lines in data (ilines)
+    // 3. for i = start; i < start + min(ilines, dlines); i++
+    //    change bline data, move marks left if needed, mark dirty
+    // 4. buffer_insert_w_bline if left over ilines
+    //    or buffer_delete_w_bline if left over dlines
+    /*
+    bline_t* end_line;
+    bline_t* cur_line;
+    bint_t end_col;
+    bint_t cur_col;
+    bint_t line_len;
+    bint_t insert_rem;
+    bint_t delete_rem;
+    char* data_cursor;
+    char* data_newline;
+
+    // Find end_line:end_col
+    _buffer_find_end_pos(start_line, start_col, num_chars, &end_line, &end_col, &num_chars);
+
+    // Replace data on common lines
+    insert_rem = data_len;
+    delete_rem = num_chars;
+    cur_line = start_line;
+    cur_col = start_col;
+    while (cur_line && insert_rem > 0 && delete_rem > 0) {
+        data_newline = memchr(data_cursor, '\n', insert_rem);
+        if (data_newline) {
+            line_len = (bint_t)(data_newline - data_cursor);
+            insert_rem -= line_len + 1;
+        } else {
+            line_len = insert_rem;
+            insert_rem = 0;
+        }
+
+        if (delete_rem >= line_len) {
+        }
+
+        delete_rem -= cur_line->char_count - cur_col + 1;
+        _buffer_bline_replace(cur_line, cur_col, data_cursor, line_len);
+        if (data_newline) data_cursor = data_newline + 1;
+        if (cur_line->next) {
+            cur_line = cur_line->next;
+            cur_col = 0;
+        } else {
+            cur_col = cur_line->char_count;
+            break;
+        }
+    }
+
+    if (insert_rem > 0) {
+    }
+
+    if (delete_rem > 0) {
+    }
+    */
+    return MLBUF_ERR;
 }
 
 // Return a line given a line_index
@@ -1436,6 +1493,36 @@ static bline_t* _buffer_bline_break(bline_t* bline, bint_t col) {
     }
 
     return new_line;
+}
+
+// Given start_line:start_col + num_chars, find end_line:end_col
+static void _buffer_find_end_pos(bline_t* start_line, bint_t start_col, bint_t num_chars, bline_t** ret_end_line, bint_t* ret_end_col, bint_t* ret_safe_num_chars) {
+    bline_t* end_line;
+    bint_t end_col;
+    bint_t num_chars_rem;
+    end_line = start_line;
+    end_col = start_col;
+    num_chars_rem = num_chars;
+    while (num_chars_rem > 0) {
+        MLBUF_BLINE_ENSURE_CHARS(end_line);
+        if (end_line->char_count - end_col >= num_chars_rem) {
+            end_col += num_chars_rem;
+            num_chars_rem = 0;
+        } else {
+            num_chars_rem -= (end_line->char_count - end_col) + 1;
+            if (end_line->next) {
+                end_line = end_line->next;
+                end_col = 0;
+            } else {
+                end_col = end_line->char_count;
+                break;
+            }
+        }
+    }
+    num_chars -= num_chars_rem;
+    *ret_end_line = end_line;
+    *ret_end_col = end_col;
+    *ret_safe_num_chars = num_chars;
 }
 
 static bint_t _buffer_bline_insert(bline_t* bline, bint_t col, char* data, bint_t data_len, int move_marks) {

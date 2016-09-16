@@ -1,7 +1,7 @@
 #include <wchar.h>
 #include "mlbuf.h"
 
-// Move self/col forward until col fits exists on current line
+// Move self/col forward until col fits on current line
 static void _bline_advance_col(bline_t** self, bint_t* col) {
     while (1) {
         MLBUF_BLINE_ENSURE_CHARS(*self);
@@ -109,6 +109,12 @@ int bline_insert(bline_t* self, bint_t col, char* data, bint_t data_len, bint_t*
 int bline_delete(bline_t* self, bint_t col, bint_t num_chars) {
     _bline_advance_col(&self, &col);
     return buffer_delete_w_bline(self->buffer, self, col, num_chars);
+}
+
+// Replace data on a line
+int bline_replace(bline_t* self, bint_t col, bint_t num_chars, char* data, bint_t data_len) {
+    _bline_advance_col(&self, &col);
+    return buffer_replace_w_bline(self->buffer, self, col, num_chars, data, data_len);
 }
 
 // Return a col given a byte index

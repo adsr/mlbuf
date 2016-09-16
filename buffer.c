@@ -1536,7 +1536,7 @@ static bint_t _buffer_bline_delete(bline_t* bline, bint_t col, bint_t num_chars)
     // Move marks past col left by num_chars_deleted
     DL_FOREACH_SAFE(bline->marks, mark, mark_tmp) {
         if (mark->col > col) {
-            mark->col -= num_chars_deleted;
+            mark->col = MLBUF_MAX(0, mark->col - num_chars_deleted);
         }
     }
 

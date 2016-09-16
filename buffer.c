@@ -1176,13 +1176,13 @@ static int _buffer_apply_styles_singles(bline_t* start_line, bint_t min_nlines) 
     cur_line = start_line;
     styled_nlines = 0;
     while (cur_line && styled_nlines < min_nlines) {
-        if (cur_line->data_len > 0) {
-            // Reset styles of cur_line
-            for (i = 0; i < cur_line->data_len; i++) {
-                cur_line->chars[i].style = (sblock_t){0, 0};
-            }
+        // Reset styles of cur_line
+        for (i = 0; i < cur_line->data_cap; i++) {
+            cur_line->chars[i].style = (sblock_t){0, 0};
+        }
 
-            // Apply single-line styles to cur_line
+        // Apply single-line styles to cur_line
+        if (cur_line->data_len > 0) {
             DL_FOREACH(start_line->buffer->single_srules, srule_node) {
                 _buffer_bline_apply_style_single(srule_node->srule, cur_line);
             }

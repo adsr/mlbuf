@@ -226,6 +226,7 @@ mark_t* buffer_add_lettered_mark(buffer_t* self, char letter, bline_t* maybe_lin
         return NULL;
     }
     mark->letter = letter;
+    mark->find_budge = 1;
     MLBUF_MAKE_GT_EQ0(maybe_col);
     if (maybe_line != NULL) {
         MLBUF_BLINE_ENSURE_CHARS(maybe_line);

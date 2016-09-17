@@ -16,6 +16,7 @@ static char* mark_find_prev_cre_matchfn(char* haystack, bint_t haystack_len, bin
 static int* pcre_ovector = NULL;
 static int pcre_ovector_size = 0;
 static int* pcre_rc;
+static int find_budge = 1;
 
 // Return a clone (same position) of an existing mark
 int mark_clone(mark_t* self, mark_t** ret_mark) {
@@ -563,6 +564,13 @@ int mark_set_pcre_capture(int* rc, int* ovector, int ovector_size) {
     return MLBUF_ERR;
 }
 
+// Set find budge
+int mark_set_find_budge(int budge, int* optret_orig) {
+    if (optret_orig) *optret_orig = find_budge;
+    find_budge = budge;
+    return MLBUF_OK;
+}
+
 // Return char after mark, or 0 if at eol.
 int mark_get_char_after(mark_t* self, uint32_t* ret_char) {
     if (mark_is_at_eol(self)) {
@@ -622,7 +630,7 @@ static int mark_find_match(mark_t* self, mark_find_match_fn matchfn, void* u1, v
             // Normally we only look at matches after the current mark col
             // (self->col+1), but this prevents us from ever matching the first
             // char of the buffer, so we make a special case there.
-            budge = (self->bline->line_index == 0 && self->col == 0) ? 0 : 1;
+            budge = (self->bline->line_index == 0 && self->col == 0) ? 0 : find_budge;
             look_offset = self->col + budge < search_line->char_count ? search_line->chars[self->col + budge].index : search_line->data_len;
             max_offset = search_line->data_len;
         }

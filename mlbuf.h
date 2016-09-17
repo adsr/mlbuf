@@ -128,6 +128,7 @@ struct mark_s {
     bint_t target_col;
     srule_t* range_srule;
     char letter;
+    int8_t find_budge;
     mark_t* next;
     mark_t* prev;
 };
@@ -261,6 +262,7 @@ int mark_move_to_w_bline(mark_t* self, bline_t* bline, bint_t col);
 int mark_move_vert(mark_t* self, bint_t line_delta);
 int mark_replace_between_mark(mark_t* self, mark_t* other, char* data, bint_t data_len);
 int mark_replace(mark_t* self, bint_t num_chars, char* data, bint_t data_len);
+int mark_set_find_budge(int budge, int* optret_orig);
 int mark_set_pcre_capture(int* rc, int* ovector, int ovector_size);
 int mark_swap_with_mark(mark_t* self, mark_t* other);
 

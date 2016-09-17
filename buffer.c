@@ -26,9 +26,9 @@ static bline_t* _buffer_bline_new(buffer_t* self);
 static int _buffer_bline_free(bline_t* bline, bline_t* maybe_mark_line, bint_t col_delta);
 static bline_t* _buffer_bline_break(bline_t* bline, bint_t col);
 static void _buffer_find_end_pos(bline_t* start_line, bint_t start_col, bint_t num_chars, bline_t** ret_end_line, bint_t* ret_end_col, bint_t* ret_safe_num_chars);
+static void _buffer_bline_replace(bline_t* bline, bint_t start_col, char* data, bint_t data_len, str_t* del_data);
 static bint_t _buffer_bline_insert(bline_t* bline, bint_t col, char* data, bint_t data_len, int move_marks);
 static bint_t _buffer_bline_delete(bline_t* bline, bint_t col, bint_t num_chars);
-static void _buffer_bline_replace(bline_t* bline, bint_t start_col, char* data, bint_t data_len);
 static bint_t _buffer_bline_col_to_index(bline_t* bline, bint_t col);
 static bint_t _buffer_bline_index_to_col(bline_t* bline, bint_t index);
 static int _buffer_munmap(buffer_t* self);
@@ -460,7 +460,7 @@ int buffer_insert_w_bline(buffer_t* self, bline_t* start_line, bint_t start_col,
     // Get inserted data
     buffer_substr(self, start_line, start_col, cur_line, cur_col, &ins_data, &ins_data_len, &ins_data_nchars);
 
-    // Handle action
+    // Add baction
     action = calloc(1, sizeof(baction_t));
     action->type = MLBUF_BACTION_TYPE_INSERT;
     action->buffer = self;
@@ -556,7 +556,7 @@ int buffer_delete_w_bline(buffer_t* self, bline_t* start_line, bint_t start_col,
     start_line->next = swap_line;
     if (swap_line) swap_line->prev = start_line;
 
-    // Handle action
+    // Add baction
     action = calloc(1, sizeof(baction_t));
     action->type = MLBUF_BACTION_TYPE_DELETE;
     action->buffer = self;
@@ -589,27 +589,34 @@ int buffer_replace(buffer_t* self, bint_t offset, bint_t num_chars, char* data, 
 }
 
 // Replace num_chars from start_line:start_col with data
-int buffer_replace_w_bline(buffer_t* self, bline_t* start_line, bint_t start_col, bint_t num_chars, char* data, bint_t data_len) {
+int buffer_replace_w_bline(buffer_t* self, bline_t* start_line, bint_t start_col, bint_t del_chars, char* data, bint_t data_len) {
     bline_t* cur_line;
     bint_t cur_col;
     bint_t insert_rem;
     bint_t delete_rem;
     bint_t data_linelen;
+    bint_t nchars_ins;
+    bint_t nlines;
     char* data_cursor;
     char* data_newline;
+    baction_t* action;
+    str_t del_data = {0};
 
     // Replace data on common lines
     insert_rem = data_len;
-    delete_rem = num_chars;
+    delete_rem = del_chars;
     cur_line = start_line;
     cur_col = start_col;
     data_cursor = data;
+    nchars_ins = 0;
+    nlines = 0;
     MLBUF_BLINE_ENSURE_CHARS(cur_line);
     while (insert_rem > 0 && delete_rem > (cur_line->char_count - cur_col)) {
         data_newline = memchr(data_cursor, '\n', insert_rem);
         data_linelen = data_newline ? (bint_t)(data_newline - data_cursor) : insert_rem;
         delete_rem -= cur_line->char_count - cur_col;
-        _buffer_bline_replace(cur_line, cur_col, data_cursor, data_linelen);
+        _buffer_bline_replace(cur_line, cur_col, data_cursor, data_linelen, &del_data);
+        nchars_ins += cur_line->char_count - cur_col;
         insert_rem -= data_linelen;
         data_cursor += data_linelen;
         cur_col = cur_line->char_count;
@@ -619,10 +626,48 @@ int buffer_replace_w_bline(buffer_t* self, bline_t* start_line, bint_t start_col
             delete_rem -= 1;
             cur_line = cur_line->next;
             cur_col = 0;
+            nchars_ins += 1;
+            str_append_len(&del_data, "\n", 1);
         } else {
             break;
         }
+        nlines += 1;
         MLBUF_BLINE_ENSURE_CHARS(cur_line);
+    }
+
+    // Add delete baction
+    if (del_data.len > 0) {
+        action = calloc(1, sizeof(baction_t));
+        action->type = MLBUF_BACTION_TYPE_DELETE;
+        action->buffer = self;
+        action->start_line = start_line;
+        action->start_line_index = start_line->line_index;
+        action->start_col = start_col;
+        action->byte_delta = -1 * del_data.len;
+        action->char_delta = -1 * (del_chars - delete_rem);
+        action->line_delta = -1 * nlines;
+        action->data = del_data.data;
+        action->data_len = del_data.len;
+        _buffer_update(self, action);
+    }
+
+    // Add insert baction
+    if (data_len - insert_rem > 0) {
+        action = calloc(1, sizeof(baction_t));
+        action->type = MLBUF_BACTION_TYPE_INSERT;
+        action->buffer = self;
+        action->start_line = start_line;
+        action->start_line_index = start_line->line_index;
+        action->start_col = start_col;
+        action->maybe_end_line = cur_line;
+        action->maybe_end_line_index = action->start_line_index + nlines;
+        action->maybe_end_col = cur_col;
+        action->byte_delta = data_len - insert_rem;
+        action->char_delta = nchars_ins;
+        action->line_delta = nlines;
+        action->data = strndup(data, action->byte_delta);
+        action->data_len = action->byte_delta;
+        _buffer_update(self, action);
     }
 
     // Delete left over data
@@ -938,7 +983,6 @@ int buffer_apply_styles(buffer_t* self, bline_t* start_line, bint_t line_delta) 
     //     line_delta  > 0: 1 + line_delta (start_line + added lines)
     min_nlines = 1 + (line_delta < 0 ? 1 : line_delta);
 
-
     // Count current srules
     srule_count = 0;
     DL_COUNT(self->single_srules, srule_node, count_tmp);
@@ -998,41 +1042,6 @@ int buffer_register_get(buffer_t* self, char reg, int dup, char** ret_data, size
         *ret_data_len = sreg->len;
     }
     return MLBUF_OK;
-}
-
-// Return hash of buffer data
-// This is a DJBX33A implementation ported from php-src/Zend/zend_string.h
-uintmax_t buffer_hash(buffer_t* self) {
-    uintmax_t hash;
-    bline_t* bline;
-    bint_t len;
-    char* str;
-    hash = 5381;
-    for (bline = self->first_line; bline; bline = bline->next) {
-        len = bline->data_len;
-        str = bline->data;
-        for (; len >= 8; len -= 8) {
-            hash = ((hash << 5) + hash) + *str++;
-            hash = ((hash << 5) + hash) + *str++;
-            hash = ((hash << 5) + hash) + *str++;
-            hash = ((hash << 5) + hash) + *str++;
-            hash = ((hash << 5) + hash) + *str++;
-            hash = ((hash << 5) + hash) + *str++;
-            hash = ((hash << 5) + hash) + *str++;
-            hash = ((hash << 5) + hash) + *str++;
-        }
-        switch (len) {
-            case 7: hash = ((hash << 5) + hash) + *str++;
-            case 6: hash = ((hash << 5) + hash) + *str++;
-            case 5: hash = ((hash << 5) + hash) + *str++;
-            case 4: hash = ((hash << 5) + hash) + *str++;
-            case 3: hash = ((hash << 5) + hash) + *str++;
-            case 2: hash = ((hash << 5) + hash) + *str++;
-            case 1: hash = ((hash << 5) + hash) + *str++; break;
-            default: break;
-        }
-    }
-    return hash;
 }
 
 static int _buffer_open_mmap(buffer_t* self, int fd, size_t size) {
@@ -1515,7 +1524,7 @@ static void _buffer_find_end_pos(bline_t* start_line, bint_t start_col, bint_t n
     *ret_safe_num_chars = num_chars;
 }
 
-static void _buffer_bline_replace(bline_t* bline, bint_t start_col, char* data, bint_t data_len) {
+static void _buffer_bline_replace(bline_t* bline, bint_t start_col, char* data, bint_t data_len, str_t* del_data) {
     bint_t start_index;
     mark_t* mark;
 
@@ -1535,6 +1544,9 @@ static void _buffer_bline_replace(bline_t* bline, bint_t start_col, char* data, 
         bline->data = realloc(bline->data, start_index + data_len);
         bline->data_cap = start_index + data_len;
     }
+
+    // Store del_data
+    str_append_len(del_data, bline->data + start_index, bline->data_len - start_index);
 
     // Copy data into slot and update chars
     memmove(bline->data + start_index, data, (size_t)data_len);

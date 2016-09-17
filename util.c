@@ -62,10 +62,12 @@ void str_set_len(str_t* str, char* data, size_t data_len) {
 
 // Append/prepend data_len bytes of data to str
 void str_put_len(str_t* str, char* data, size_t data_len, int is_prepend) {
-    #define MLE_STR_APPEND_INCR 256
     size_t req_cap;
     req_cap = str->len + data_len + 1;
-    str_ensure_cap(str, MLBUF_MAX(req_cap, str->cap+MLE_STR_APPEND_INCR));
+    if (req_cap > str->cap) {
+        req_cap = MLBUF_MAX(req_cap, str->cap + (str->inc > 0 ? str->inc : 128));
+    }
+    str_ensure_cap(str, req_cap);;
     if (is_prepend) {
         memmove(str->data, str->data + data_len, data_len);
         memcpy(str->data, data, data_len);

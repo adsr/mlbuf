@@ -27,6 +27,7 @@ struct str_s {
     char* data;
     size_t len;
     size_t cap;
+    size_t inc;
 };
 
 // buffer_t
@@ -192,7 +193,6 @@ int buffer_register_prepend(buffer_t* self, char reg, char* data, size_t data_le
 int buffer_register_clear(buffer_t* self, char reg);
 int buffer_register_get(buffer_t* self, char reg, int dup, char** ret_data, size_t* ret_data_len);
 int buffer_destroy(buffer_t* self);
-uintmax_t buffer_hash(buffer_t* self);
 
 // bline functions
 int bline_insert(bline_t* self, bint_t col, char* data, bint_t data_len, bint_t* ret_num_chars);

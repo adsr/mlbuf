@@ -58,6 +58,23 @@ int mark_delete_before(mark_t* self, bint_t num_chars) {
     return rc;
 }
 
+// Replace data
+int mark_replace(mark_t* self, bint_t num_chars, char* data, bint_t data_len) {
+    return bline_replace(self->bline, self->col, num_chars, data, data_len);
+}
+
+// Replace data between marks
+int mark_replace_between_mark(mark_t* self, mark_t* other, char* data, bint_t data_len) {
+    bint_t offset_a;
+    bint_t offset_b;
+    buffer_get_offset(self->bline->buffer, self->bline, self->col, &offset_a);
+    buffer_get_offset(other->bline->buffer, other->bline, other->col, &offset_b);
+    if (offset_a < offset_b) {
+        return buffer_replace(self->bline->buffer, offset_a, offset_b - offset_a, data, data_len);
+    }
+    return buffer_replace(self->bline->buffer, offset_b, offset_a - offset_b, data, data_len);
+}
+
 // Move mark to bline:col
 int mark_move_to_w_bline(mark_t* self, bline_t* bline, bint_t col) {
     _mark_mark_move_inner(self, bline, col, 1, 1);

@@ -28,6 +28,7 @@ static bline_t* _buffer_bline_break(bline_t* bline, bint_t col);
 static void _buffer_find_end_pos(bline_t* start_line, bint_t start_col, bint_t num_chars, bline_t** ret_end_line, bint_t* ret_end_col, bint_t* ret_safe_num_chars);
 static bint_t _buffer_bline_insert(bline_t* bline, bint_t col, char* data, bint_t data_len, int move_marks);
 static bint_t _buffer_bline_delete(bline_t* bline, bint_t col, bint_t num_chars);
+static void _buffer_bline_replace(bline_t* bline, bint_t start_col, char* data, bint_t data_len);
 static bint_t _buffer_bline_col_to_index(bline_t* bline, bint_t col);
 static bint_t _buffer_bline_index_to_col(bline_t* bline, bint_t index);
 static int _buffer_munmap(buffer_t* self);
@@ -589,63 +590,52 @@ int buffer_replace(buffer_t* self, bint_t offset, bint_t num_chars, char* data, 
 
 // Replace num_chars from start_line:start_col with data
 int buffer_replace_w_bline(buffer_t* self, bline_t* start_line, bint_t start_col, bint_t num_chars, char* data, bint_t data_len) {
-    // 1. find end_line:end_col using start_line:start_col+num_chars (dlines)
-    // 2. find num lines in data (ilines)
-    // 3. for i = start; i < start + min(ilines, dlines); i++
-    //    change bline data, move marks left if needed, mark dirty
-    // 4. buffer_insert_w_bline if left over ilines
-    //    or buffer_delete_w_bline if left over dlines
-    /*
-    bline_t* end_line;
     bline_t* cur_line;
-    bint_t end_col;
     bint_t cur_col;
-    bint_t line_len;
     bint_t insert_rem;
     bint_t delete_rem;
+    bint_t data_linelen;
     char* data_cursor;
     char* data_newline;
-
-    // Find end_line:end_col
-    _buffer_find_end_pos(start_line, start_col, num_chars, &end_line, &end_col, &num_chars);
 
     // Replace data on common lines
     insert_rem = data_len;
     delete_rem = num_chars;
     cur_line = start_line;
     cur_col = start_col;
-    while (cur_line && insert_rem > 0 && delete_rem > 0) {
+    data_cursor = data;
+    MLBUF_BLINE_ENSURE_CHARS(cur_line);
+    while (insert_rem > 0 && delete_rem > (cur_line->char_count - cur_col)) {
         data_newline = memchr(data_cursor, '\n', insert_rem);
-        if (data_newline) {
-            line_len = (bint_t)(data_newline - data_cursor);
-            insert_rem -= line_len + 1;
-        } else {
-            line_len = insert_rem;
-            insert_rem = 0;
-        }
-
-        if (delete_rem >= line_len) {
-        }
-
-        delete_rem -= cur_line->char_count - cur_col + 1;
-        _buffer_bline_replace(cur_line, cur_col, data_cursor, line_len);
-        if (data_newline) data_cursor = data_newline + 1;
-        if (cur_line->next) {
+        data_linelen = data_newline ? (bint_t)(data_newline - data_cursor) : insert_rem;
+        delete_rem -= cur_line->char_count - cur_col;
+        _buffer_bline_replace(cur_line, cur_col, data_cursor, data_linelen);
+        insert_rem -= data_linelen;
+        data_cursor += data_linelen;
+        cur_col = cur_line->char_count;
+        if (data_newline && insert_rem >= 2 && delete_rem >= 2 && cur_line->next) {
+            data_cursor += 1;
+            insert_rem -= 1;
+            delete_rem -= 1;
             cur_line = cur_line->next;
             cur_col = 0;
         } else {
-            cur_col = cur_line->char_count;
             break;
         }
+        MLBUF_BLINE_ENSURE_CHARS(cur_line);
     }
 
-    if (insert_rem > 0) {
-    }
-
+    // Delete left over data
     if (delete_rem > 0) {
+        buffer_delete_w_bline(self, cur_line, cur_col, delete_rem);
     }
-    */
-    return MLBUF_ERR;
+
+    // Insert left over data
+    if (insert_rem > 0) {
+        buffer_insert_w_bline(self, cur_line, cur_col, data_cursor, insert_rem, NULL);
+    }
+
+    return MLBUF_OK;
 }
 
 // Return a line given a line_index
@@ -1523,6 +1513,40 @@ static void _buffer_find_end_pos(bline_t* start_line, bint_t start_col, bint_t n
     *ret_end_line = end_line;
     *ret_end_col = end_col;
     *ret_safe_num_chars = num_chars;
+}
+
+static void _buffer_bline_replace(bline_t* bline, bint_t start_col, char* data, bint_t data_len) {
+    bint_t start_index;
+    mark_t* mark;
+
+    // Unslab if needed
+    if (bline->is_data_slabbed) _buffer_bline_unslab(bline);
+
+    // Realloc if needed
+    MLBUF_BLINE_ENSURE_CHARS(bline);
+    if (start_col <= 0) {
+        start_index = 0;
+    } else if (start_col >= bline->char_count) {
+        start_index = bline->data_len;
+    } else {
+        start_index = bline->chars[start_col].index;
+    }
+    if (start_index + data_len >= bline->data_cap) {
+        bline->data = realloc(bline->data, start_index + data_len);
+        bline->data_cap = start_index + data_len;
+    }
+
+    // Copy data into slot and update chars
+    memmove(bline->data + start_index, data, (size_t)data_len);
+    bline->data_len = start_index + data_len;
+    bline_count_chars(bline);
+
+    // Fix marks
+    DL_FOREACH(bline->marks, mark) {
+        if (mark->col > bline->char_count) {
+            mark->col = bline->char_count;
+        }
+    }
 }
 
 static bint_t _buffer_bline_insert(bline_t* bline, bint_t col, char* data, bint_t data_len, int move_marks) {

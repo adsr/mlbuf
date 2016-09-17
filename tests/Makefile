@@ -15,7 +15,8 @@ run: $(test_bins)
 		[ $$ec -eq 0 ] && pass=$$((pass+1)); \
 		total=$$((total+1)); \
 	done; \
-	printf "Passed %d out of %d tests\n" $$pass $$total
+	printf "Passed %d out of %d tests\n" $$pass $$total ; \
+	[ $$pass -eq $$total ] || exit 1
 
 $(test_bins): %: %.c ../libmlbuf.so
 	$(CC) $(test_cflags) $(test_ldflags) $< -o $@ $(test_ldlibs)

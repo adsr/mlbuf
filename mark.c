@@ -17,6 +17,11 @@ static int* pcre_ovector = NULL;
 static int pcre_ovector_size = 0;
 static int* pcre_rc;
 static int find_budge = 1;
+static char bracket_pairs[8] = {
+    '[', ']',
+    '(', ')',
+    '{', '}'
+};
 
 // Return a clone (same position) of an existing mark
 int mark_clone(mark_t* self, mark_t** ret_mark) {
@@ -239,11 +244,6 @@ int mark_find_bracket_top(mark_t* self, bint_t max_chars, bline_t** ret_line, bi
     int found;
     int i;
     int i_left;
-    static char pairs[8] = { // TODO define these once somewhere
-        '[', ']',
-        '(', ')',
-        '{', '}'
-    };
     cur_line = self->bline;
     col = self->col;
     stacks = calloc(128, sizeof(int));
@@ -259,12 +259,12 @@ int mark_find_bracket_top(mark_t* self, bint_t max_chars, bline_t** ret_line, bi
         }
         for (i = 0; i < 8; i++) {
             i_left = (i % 2 == 0 ? i : i - 1);
-            if (cur_line->chars[col].ch == pairs[i]) {
-                stacks[(int)pairs[i_left]] += (i % 2 == 0 ? -1 : 1);
-                if (stacks[(int)pairs[i_left]] <= -1) {
+            if (cur_line->chars[col].ch == bracket_pairs[i]) {
+                stacks[(int)bracket_pairs[i_left]] += (i % 2 == 0 ? -1 : 1);
+                if (stacks[(int)bracket_pairs[i_left]] <= -1) {
                     *ret_line = cur_line;
                     *ret_col = col;
-                    *ret_brkt = pairs[i];
+                    *ret_brkt = bracket_pairs[i];
                     found = 1;
                 }
                 break;
@@ -287,11 +287,6 @@ int mark_find_bracket_pair(mark_t* self, bint_t max_chars, bline_t** ret_line, b
     bint_t col;
     bint_t nchars;
     bline_t* cur_line;
-    static char pairs[8] = {
-        '[', ']',
-        '(', ')',
-        '{', '}'
-    };
     MLBUF_BLINE_ENSURE_CHARS(self->bline);
 
     // If we're at eol, there's nothing to match
@@ -303,12 +298,12 @@ int mark_find_bracket_pair(mark_t* self, bint_t max_chars, bline_t** ret_line, b
     // Find targ matching bracket char
     targ = 0;
     for (i = 0; i < 8; i++) {
-        if (pairs[i] == brkt) {
+        if (bracket_pairs[i] == brkt) {
             if (i % 2 == 0) {
-                targ = pairs[i + 1];
+                targ = bracket_pairs[i + 1];
                 dir = 1;
             } else {
-                targ = pairs[i - 1];
+                targ = bracket_pairs[i - 1];
                 dir = -1;
             }
             break;

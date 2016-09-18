@@ -1037,7 +1037,7 @@ int buffer_register_clear(buffer_t* self, char reg) {
 int buffer_register_get(buffer_t* self, char reg, int dup, char** ret_data, size_t* ret_data_len) {
     str_t* sreg;
     MLBUF_ENSURE_AZ(reg);
-    sreg = &self->registers[(int)reg];
+    sreg = MLBUF_REG_PTR(self, reg);
     if (dup) {
         *ret_data = strndup(sreg->data, sreg->len);
         *ret_data_len = strlen(*ret_data);

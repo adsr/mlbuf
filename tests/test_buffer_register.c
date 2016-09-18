@@ -21,4 +21,3 @@ MAIN("hi",
     ASSERT("clr1", 0, reg_len);
     ASSERT("clr2", 1, reg != NULL ? 1 : 0);
 )
-

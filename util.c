@@ -69,7 +69,7 @@ void str_put_len(str_t* str, char* data, size_t data_len, int is_prepend) {
     }
     str_ensure_cap(str, req_cap);;
     if (is_prepend) {
-        memmove(str->data, str->data + data_len, data_len);
+        memmove(str->data + data_len, str->data, str->len);
         memcpy(str->data, data, data_len);
     } else {
         memcpy(str->data + str->len, data, data_len);

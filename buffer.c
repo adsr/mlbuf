@@ -1033,7 +1033,7 @@ int buffer_register_clear(buffer_t* self, char reg) {
     return MLBUF_OK;
 }
 
-// Get register, optionally allocating data
+// Get register, optionally allocating duplicate
 int buffer_register_get(buffer_t* self, char reg, int dup, char** ret_data, size_t* ret_data_len) {
     str_t* sreg;
     MLBUF_ENSURE_AZ(reg);

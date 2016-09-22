@@ -27,7 +27,7 @@ struct str_s {
     char* data;
     size_t len;
     size_t cap;
-    size_t inc;
+    ssize_t inc;
 };
 
 // buffer_t
@@ -204,7 +204,6 @@ int bline_get_col_from_vcol(bline_t* self, bint_t vcol, bint_t* ret_col);
 int bline_count_chars(bline_t* bline);
 
 // mark functions
-
 int mark_clone(mark_t* self, mark_t** ret_mark);
 int mark_clone_w_letter(mark_t* self, char letter, mark_t** ret_mark);
 int mark_delete_after(mark_t* self, bint_t num_chars);
@@ -282,6 +281,7 @@ void* recalloc(void* ptr, size_t orig_num, size_t new_num, size_t el_size);
 void _mark_mark_move_inner(mark_t* mark, bline_t* bline_target, bint_t col, int do_set_target, int do_style);
 void str_append_stop(str_t* str, char* data, char* data_stop);
 void str_append(str_t* str, char* data);
+void str_append_char(str_t* str, char c);
 void str_append_len(str_t* str, char* data, size_t data_len);
 void str_prepend_stop(str_t* str, char* data, char* data_stop);
 void str_prepend(str_t* str, char* data);

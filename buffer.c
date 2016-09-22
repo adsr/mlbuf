@@ -553,7 +553,7 @@ int buffer_delete_w_bline(buffer_t* self, bline_t* start_line, bint_t start_col,
     tmp_line = start_line->next;
     while (tmp_line != NULL && tmp_line != swap_line) {
         next_line = tmp_line->next;
-        _buffer_bline_free(tmp_line, start_line, orig_char_count);
+        _buffer_bline_free(tmp_line, start_line, orig_char_count - end_col);
         num_lines_removed += 1;
         tmp_line = next_line;
     }

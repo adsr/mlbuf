@@ -217,19 +217,20 @@ int buffer_destroy(buffer_t* self) {
 
 // Add a mark to this buffer and return it
 mark_t* buffer_add_mark(buffer_t* self, bline_t* maybe_line, bint_t maybe_col) {
-    return buffer_add_lettered_mark(self, '\0', maybe_line, maybe_col);
+    return buffer_add_mark_ex(self, '\0', maybe_line, maybe_col);
 }
 
-// Add a lettered mark. Ignore letter if not [a..z].
-mark_t* buffer_add_lettered_mark(buffer_t* self, char letter, bline_t* maybe_line, bint_t maybe_col) {
+// If letter is [a-z], add a lettered mark and return it.
+// If letter is \0, add a non-lettered mark and return it.
+// Otherwise do nothing and return NULL.
+mark_t* buffer_add_mark_ex(buffer_t* self, char letter, bline_t* maybe_line, bint_t maybe_col) {
     mark_t* mark;
     mark_t* mark_tmp;
-    mark = calloc(1, sizeof(mark_t));
     if (!((letter >= 'a' && letter <= 'z') || letter == '\0')) {
         return NULL;
     }
+    mark = calloc(1, sizeof(mark_t));
     mark->letter = letter;
-    mark->find_budge = 1;
     MLBUF_MAKE_GT_EQ0(maybe_col);
     if (maybe_line != NULL) {
         MLBUF_BLINE_ENSURE_CHARS(maybe_line);
@@ -1604,10 +1605,10 @@ static bint_t _buffer_bline_insert(bline_t* bline, bint_t col, char* data, bint_
     bline_count_chars(bline);
     num_chars_added = bline->char_count - orig_char_count;
 
-    // Move marks at or past col right by num_chars_added
+    // Move marks after col right by num_chars_added
     if (move_marks) {
         DL_FOREACH_SAFE(bline->marks, mark, mark_tmp) {
-            if (mark->col >= col) {
+            if (mark_is_after_col_minus_lefties(mark, col)) {
                 mark->col += num_chars_added;
             }
         }
@@ -1660,7 +1661,7 @@ static bint_t _buffer_bline_delete(bline_t* bline, bint_t col, bint_t num_chars)
     bline_count_chars(bline);
     num_chars_deleted = orig_char_count - bline->char_count;
 
-    // Move marks past col left by num_chars_deleted
+    // Move marks after col left by num_chars_deleted
     DL_FOREACH_SAFE(bline->marks, mark, mark_tmp) {
         if (mark->col > col) {
             mark->col = MLBUF_MAX(0, mark->col - num_chars_deleted);

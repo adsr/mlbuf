@@ -16,7 +16,6 @@ static char* mark_find_prev_cre_matchfn(char* haystack, bint_t haystack_len, bin
 static int* pcre_ovector = NULL;
 static int pcre_ovector_size = 0;
 static int* pcre_rc;
-static int find_budge = 1;
 static char bracket_pairs[8] = {
     '[', ']',
     '(', ')',
@@ -31,7 +30,7 @@ int mark_clone(mark_t* self, mark_t** ret_mark) {
 
 // Return a lettered clone (same position) of an existing mark
 int mark_clone_w_letter(mark_t* self, char letter, mark_t** ret_mark) {
-    *ret_mark = buffer_add_lettered_mark(self->bline->buffer, letter, self->bline, self->col);
+    *ret_mark = buffer_add_mark_ex(self->bline->buffer, letter, self->bline, self->col);
     return MLBUF_OK;
 }
 
@@ -444,8 +443,22 @@ int mark_destroy(mark_t* self) {
     bint_t char_count = 0; \
     if ((rc = (findfn)((mark), __VA_ARGS__, &line, &col, &char_count)) == MLBUF_OK) { \
         _mark_mark_move_inner((mark), line, col, 1, 1); \
-        return MLBUF_OK; \
     } \
+    return rc; \
+} while(0)
+
+#define MLBUF_MARK_IMPLEMENT_NUDGE_VIA_FIND(mark, findfn, ...) do { \
+    int rc; \
+    bline_t* line = NULL; \
+    bint_t col = 0; \
+    bint_t char_count = 0; \
+    mark_t* tmark = NULL; \
+    mark_clone((mark), &tmark); \
+    mark_move_by(tmark, 1); \
+    if ((rc = (findfn)(tmark, __VA_ARGS__, &line, &col, &char_count)) == MLBUF_OK) { \
+        _mark_mark_move_inner((mark), line, col, 1, 1); \
+    } \
+    mark_destroy(tmark); \
     return rc; \
 } while(0)
 
@@ -471,6 +484,18 @@ int mark_move_next_re(mark_t* self, char* re, bint_t re_len) {
 
 int mark_move_prev_re(mark_t* self, char* re, bint_t re_len) {
     MLBUF_MARK_IMPLEMENT_MOVE_VIA_FIND(self, mark_find_prev_re, re, re_len);
+}
+
+int mark_move_next_str_nudge(mark_t* self, char* str, bint_t str_len) {
+    MLBUF_MARK_IMPLEMENT_NUDGE_VIA_FIND(self, mark_find_next_str, str, str_len);
+}
+
+int mark_move_next_cre_nudge(mark_t* self, pcre* cre) {
+    MLBUF_MARK_IMPLEMENT_NUDGE_VIA_FIND(self, mark_find_next_cre, cre);
+}
+
+int mark_move_next_re_nudge(mark_t* self, char* re, bint_t re_len) {
+    MLBUF_MARK_IMPLEMENT_NUDGE_VIA_FIND(self, mark_find_next_re, re, re_len);
 }
 
 int mark_move_bracket_pair(mark_t* self, bint_t max_chars) {
@@ -559,13 +584,6 @@ int mark_set_pcre_capture(int* rc, int* ovector, int ovector_size) {
     return MLBUF_ERR;
 }
 
-// Set find budge
-int mark_set_find_budge(int budge, int* optret_orig) {
-    if (optret_orig) *optret_orig = find_budge;
-    find_budge = budge;
-    return MLBUF_OK;
-}
-
 // Return char after mark, or 0 if at eol.
 int mark_get_char_after(mark_t* self, uint32_t* ret_char) {
     if (mark_is_at_eol(self)) {
@@ -588,6 +606,16 @@ int mark_get_char_before(mark_t* self, uint32_t* ret_char) {
     return MLBUF_OK;
 }
 
+// Return 1 if mark is after col, else 0. Lefty marks are considered 'after' col
+// if `mark->col > col`. Righty marks (the default) are considered 'after' col
+// if `mark->col >= col`.
+int mark_is_after_col_minus_lefties(mark_t* self, bint_t col) {
+    if (self->lefty) {
+        return self->col > col ? 1 : 0;
+    }
+    return self->col >= col ? 1 : 0;
+}
+
 // Find first occurrence of match according to matchfn. Search backwards if
 // reverse is truthy.
 static int mark_find_match(mark_t* self, mark_find_match_fn matchfn, void* u1, void* u2, int reverse, bline_t** ret_line, bint_t* ret_col, bint_t* ret_num_chars) {
@@ -598,11 +626,10 @@ static int mark_find_match(mark_t* self, mark_find_match_fn matchfn, void* u1, v
     bint_t match_col_end = 0;
     bint_t max_offset = 0;
     bint_t match_len = 0;
-    int budge;
     search_line = self->bline;
     *ret_line = NULL;
     if (reverse) {
-        if (self->col < 1) {
+        if (self->col <= 0) {
             // At bol, so look on prev line
             search_line = search_line->prev;
             if (!search_line) return MLBUF_ERR;
@@ -622,11 +649,7 @@ static int mark_find_match(mark_t* self, mark_find_match_fn matchfn, void* u1, v
             look_offset = 0;
             max_offset = search_line->data_len;
         } else {
-            // Normally we only look at matches after the current mark col
-            // (self->col+1), but this prevents us from ever matching the first
-            // char of the buffer, so we make a special case there.
-            budge = (self->bline->line_index == 0 && self->col == 0) ? 0 : find_budge;
-            look_offset = self->col + budge < search_line->char_count ? search_line->chars[self->col + budge].index : search_line->data_len;
+            look_offset = self->col < search_line->char_count ? search_line->chars[self->col].index : search_line->data_len;
             max_offset = search_line->data_len;
         }
     }
@@ -643,7 +666,6 @@ static int mark_find_match(mark_t* self, mark_find_match_fn matchfn, void* u1, v
         search_line = reverse ? search_line->prev : search_line->next;
         if (search_line) {
             look_offset = 0;
-            //max_offset = search_line->data_len - 1;
             max_offset = search_line->data_len;
         }
     }

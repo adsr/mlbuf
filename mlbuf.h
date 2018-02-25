@@ -184,7 +184,7 @@ int buffer_undo(buffer_t* self);
 int buffer_redo(buffer_t* self);
 int buffer_add_srule(buffer_t* self, srule_t* srule);
 int buffer_remove_srule(buffer_t* self, srule_t* srule);
-int buffer_set_callback(buffer_t* self, buffer_callback_t cb, void* udata);
+int buffer_set_callback(buffer_t* self, buffer_callback_t fn_cb, void* udata);
 int buffer_set_tab_width(buffer_t* self, int tab_width);
 int buffer_set_styles_enabled(buffer_t* self, int is_enabled);
 int buffer_apply_styles(buffer_t* self, bline_t* start_line, bint_t line_delta);

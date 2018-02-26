@@ -20,10 +20,15 @@ lib_ver       := $(lib_ver_cur).$(lib_ver_rev).$(lib_ver_age)
 srcs          := $(wildcard *.c)
 objs          := $(srcs:.c=.o)
 
+SONAME := -soname
+ifeq ($(shell uname -s),Darwin)
+    SONAME := -install_name
+endif
+
 all: $(libname).so $(libname).a
 
 $(libname).so: $(objs)
-	$(CCLD) $(LDFLAGS) -Wl,-soname,$(libname).so.$(lib_ver_cur) -o $(libname).so.$(lib_ver) $(objs) $(LDLIBS)
+	$(CCLD) $(LDFLAGS) -Wl,$(SONAME),$(libname).so.$(lib_ver_cur) -o $(libname).so.$(lib_ver) $(objs) $(LDLIBS)
 	$(LN) -s $(libname).so.$(lib_ver) $(libname).so.$(lib_ver_cur).$(lib_ver_rev)
 	$(LN) -s $(libname).so.$(lib_ver) $(libname).so.$(lib_ver_cur)
 	$(LN) -s $(libname).so.$(lib_ver) $(libname).so

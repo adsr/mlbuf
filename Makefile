@@ -7,10 +7,6 @@ CFLAGS        += -D_GNU_SOURCE -Wall -fPIC
 LDFLAGS       ?=
 LDFLAGS       += -shared
 
-PCRE_LDLIBS   ?= -lpcre
-LDLIBS        ?=
-LDLIBS        += $(PCRE_LDLIBS)
-
 libname       := libmlbuf
 lib_ver_cur   := 1
 lib_ver_rev   := 0

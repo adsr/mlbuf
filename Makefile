@@ -1,4 +1,3 @@
-SHELL         ?= /bin/bash
 CCLD          ?= $(CC)
 LN            ?= ln
 

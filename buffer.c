@@ -148,7 +148,7 @@ int buffer_save_as(buffer_t* self, char* path, bint_t* optret_nbytes) {
     buffer_write_to_file(self, fp, &nbytes);
     fclose(fp);
     if (optret_nbytes) *optret_nbytes = (bint_t)nbytes;
-    if (nbytes != self->byte_count) return MLBUF_ERR;
+    if ((bint_t)nbytes != self->byte_count) return MLBUF_ERR;
 
     // Set path
     if (self->path != path) {

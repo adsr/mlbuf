@@ -258,7 +258,7 @@ int mark_find_bracket_top(mark_t* self, bint_t max_chars, bline_t** ret_line, bi
         }
         for (i = 0; i < 8; i++) {
             i_left = (i % 2 == 0 ? i : i - 1);
-            if (cur_line->chars[col].ch == bracket_pairs[i]) {
+            if (cur_line->chars[col].ch == (uint32_t)bracket_pairs[i]) {
                 stacks[(int)bracket_pairs[i_left]] += (i % 2 == 0 ? -1 : 1);
                 if (stacks[(int)bracket_pairs[i_left]] <= -1) {
                     *ret_line = cur_line;

@@ -2,7 +2,7 @@ CCLD          ?= $(CC)
 LN            ?= ln
 
 CFLAGS        ?= -g
-CFLAGS        += -D_GNU_SOURCE -Wall -fPIC
+CFLAGS        += -D_GNU_SOURCE -Wall -Wextra -Wno-unused-parameter -fPIC
 
 LDFLAGS       ?=
 LDFLAGS       += -shared

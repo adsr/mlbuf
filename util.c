@@ -123,9 +123,12 @@ void str_append_replace_with_backrefs(str_t* str, char* subj, char* repl, int pc
     char* repl_cur;
     char* repl_z;
     char* repl_backref;
+    int repl_delta;
     int ibackref;
     char* term;
     char* term_stop;
+    char hex[3];
+    char byte;
 
     repl_stop = repl + strlen(repl);
 
@@ -144,12 +147,13 @@ void str_append_replace_with_backrefs(str_t* str, char* subj, char* repl, int pc
 
         // Append backref
         term = NULL;
+        repl_delta = 2; // marker + backref symbol
         if (repl_backref+1 >= repl_stop) {
             // No data after backref marker; append the marker itself
             term = repl_backref;
             term_stop = repl_stop;
         } else if (*(repl_backref+1) >= '0' && *(repl_backref+1) <= '9') {
-            // N was a number; append Nth captured substring from match
+            // $N; append Nth captured substring from match
             ibackref = *(repl_backref+1) - '0';
             if (ibackref < pcre_rc && ibackref < pcre_ovecsize/3) {
                 // Backref exists
@@ -160,14 +164,29 @@ void str_append_replace_with_backrefs(str_t* str, char* subj, char* repl, int pc
                 term = repl_backref;
                 term_stop = term + utf8_char_length(*(term+1));
             }
+        } else if (*(repl_backref+1) == 'n') {
+            // $n; append newline
+            term = "\n";
+            term_stop = term + 1;
+        } else if (*(repl_backref+1) == 't') {
+            // $t; append tab
+            term = "\t";
+            term_stop = term + 1;
+        } else if (*(repl_backref+1) == 'x' && repl_backref+3 < repl_stop) {
+            // $xNN; append byte
+            strncpy(hex, repl_backref+2, 2);
+            byte = strtoul(hex, NULL, 16);
+            term = &byte;
+            term_stop = term + 1;
+            repl_delta = 4; // marker + 'x' + d1 + d2
         } else {
-            // N was not a number; append marker + whatever character it was
+            // $* (not number or 'n'); append marker + whatever character it was
             term = repl_backref;
             term_stop = term + utf8_char_length(*(term+1));
         }
         str_append_stop(str, term, term_stop);
 
-        // Advance repl_cur by 2 bytes (marker + backref num)
-        repl_cur = repl_backref+2;
+        // Advance repl_cur by repl_delta bytes
+        repl_cur = repl_backref + repl_delta;
     }
 }
